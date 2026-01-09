@@ -1,4 +1,6 @@
+
 <script lang="ts">
+	import '@friendofsvelte/tipex/styles/index.css';
   import { LayoutDashboard, Folder, Users, Clock, Settings, LogOut, Building } from 'lucide-svelte';
   import { page } from '$app/stores';
   import { derived } from 'svelte/store';

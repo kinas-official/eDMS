@@ -96,7 +96,7 @@
 	});
 </script>
 
-<div class="min-h-screen p-6">
+<div class="min-h-screen space-y-6 p-6 bg-background">
 	
 
 	<!-- Quick Actions -->

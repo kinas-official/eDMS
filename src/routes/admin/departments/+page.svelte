@@ -99,7 +99,7 @@
 </script>
 
 
-
+<div class="min-h-screen space-y-6 p-6 bg-background"> 
 <!-- Search + View -->
 <div class="mb-4 flex flex-wrap items-center justify-between gap-4">
 	<input
@@ -220,7 +220,7 @@
     {/each}
   </div>
 {/if}
-
+</div>
 
 <!-- CREATE / EDIT MODAL -->
 {#if showCreate || showEdit}

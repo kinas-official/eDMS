@@ -82,9 +82,45 @@
     (filterDept === 'All' || item.department === filterDept) &&
     (filterStatus === 'All' || item.status === filterStatus)
   );
+
+  // Add workflow modal
+let addModal = false;
+
+let newWorkflow: {
+  title: string;
+  department: string;
+  status: WorkflowItem['status'];
+} = {
+  title: '',
+  department: 'HR',
+  status: 'Draft'
+};
+
+function openAddWorkflow() {
+  addModal = true;
+}
+
+function saveWorkflow() {
+  if (!newWorkflow.title.trim()) return;
+
+  const newItem: WorkflowItem = {
+    id: `${newWorkflow.department}-${Math.floor(Math.random() * 1000)}`,
+    title: newWorkflow.title,
+    department: newWorkflow.department,
+    status: newWorkflow.status,
+    createdAt: new Date().toISOString().split('T')[0]
+  };
+
+  workflowItems = [newItem, ...workflowItems];
+
+  // reset
+  newWorkflow = { title: '', department: 'HR', status: 'Draft' };
+  addModal = false;
+}
+
 </script>
 
-<div class="min-h-screen space-y-6">
+<div class="min-h-screen space-y-6 p-6 bg-background">
   <!-- Filters + View Toggle -->
   <div class="flex flex-wrap gap-4 items-center justify-between">
     <div class="flex gap-2 flex-wrap">
@@ -103,6 +139,15 @@
         <option>Approved</option>
       </select>
     </div>
+
+    <button
+  class="flex items-center gap-1 bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm"
+  on:click={openAddWorkflow}
+>
+  <Plus class="h-4 w-4" />
+  Add Workflow
+</button>
+
 
     <div class="flex gap-2">
       <button
@@ -213,6 +258,67 @@
 
 </div>
 
+{#if addModal}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div class="bg-card w-full max-w-md rounded-xl p-6">
+      <h2 class="mb-4 text-lg font-semibold">Add Workflow</h2>
+
+      <div class="space-y-4">
+        <div>
+          <label class="text-sm font-medium">Title</label>
+          <input
+            type="text"
+            bind:value={newWorkflow.title}
+            class="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+            placeholder="Document title"
+          />
+        </div>
+
+        <div>
+          <label class="text-sm font-medium">Department</label>
+          <select
+            bind:value={newWorkflow.department}
+            class="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+          >
+            <option>HR</option>
+            <option>Finance</option>
+            <option>IT</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="text-sm font-medium">Initial Status</label>
+          <select
+            bind:value={newWorkflow.status}
+            class="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+          >
+            {#each stages as stage}
+              <option value={stage}>{stage}</option>
+            {/each}
+          </select>
+        </div>
+      </div>
+
+      <div class="mt-6 flex justify-end gap-2">
+        <button
+          class="rounded-md border px-3 py-2 text-sm"
+          on:click={() => (addModal = false)}
+        >
+          Cancel
+        </button>
+
+        <button
+          class="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm"
+          on:click={saveWorkflow}
+        >
+          Create
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+
 <!-- Assign Modal -->
 {#if assignModal}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -221,7 +327,7 @@
       <div class="space-y-3">
         <select bind:value={selectedUser} class="w-full rounded-md border px-3 py-2 text-sm">
           <option value={null}>Select user</option>
-          {#each users.filter(u => u.department === assignModal.department) as user}
+          {#each users.filter(u => u.department === assignModal!.department) as user}
             <option value={user.id}>{user.name}</option>
           {/each}
         </select>
@@ -237,3 +343,4 @@
     </div>
   </div>
 {/if}
+
