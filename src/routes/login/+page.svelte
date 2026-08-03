@@ -25,34 +25,37 @@
   }
 </script>
 
-<div class="flex items-center justify-center min-h-screen bg-gradient-to-br from-white-800 via-white-700 to-gray-800 animate-gradient-x">
-  <div class="w-full max-w-md p-10 space-y-6 bg-gray-900/90 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-700">
-    
+<div class="from-sidebar via-sidebar to-sidebar-accent animate-gradient-x flex min-h-screen items-center justify-center bg-gradient-to-br">
+  <div class="border-sidebar-border bg-sidebar/90 text-sidebar-foreground w-full max-w-md space-y-6 rounded-2xl border p-10 shadow-2xl backdrop-blur-md">
+
     <!-- Logo / Title -->
     <div class="flex flex-col items-center">
-      <div class="w-16 h-16 mb-4 bg-gray-500 rounded-full flex items-center justify-center text-white font-bold text-xl animate-bounce">
+      <div class="bg-sidebar-primary text-sidebar-primary-foreground mb-4 flex h-16 w-16 items-center justify-center rounded-full text-xl font-bold">
         eD
       </div>
-      <h1 class="text-3xl font-bold text-white text-center">Welcome to your Enterprise Document Management System</h1>
-      <p class="text-gray-300 mt-1 text-sm mt-5">Please sign in to continue</p>
+      <h1 class="text-center text-3xl font-bold">Welcome to your Enterprise Document Management System</h1>
+      <p class="text-sidebar-foreground/70 mt-5 text-sm">Please sign in to continue</p>
     </div>
 
     <!-- Login Form -->
     <form class="space-y-4" on:submit|preventDefault={handleLogin}>
-      <Input  bind:value={username} required placeholder="Enter your username" />
-      <Input type="password"  bind:value={password} required placeholder="Enter your password" />
+      <Input bind:value={username} required placeholder="Enter your username" />
+      <Input type="password" bind:value={password} required placeholder="Enter your password" />
 
       {#if error}
-        <p class="text-red-500 text-sm">{error}</p>
+        <p class="text-destructive text-sm">{error}</p>
       {/if}
 
-      <Button type="submit"class="w-full transition-transform transform hover:scale-105 bg-gray-600 text-white">
+      <Button
+        type="submit"
+        class="bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 w-full transition-transform hover:scale-[1.02]"
+      >
         {loading ? 'Signing in…' : 'Login'}
       </Button>
     </form>
 
     <!-- Footer -->
-    <p class="text-gray-400 text-xs text-center mt-4">
+    <p class="text-sidebar-foreground/50 mt-4 text-center text-xs">
       &copy; {new Date().getFullYear()} eDMS. All rights reserved.
     </p>
   </div>

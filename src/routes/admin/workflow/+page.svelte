@@ -1,5 +1,7 @@
 <script lang="ts">
   import { FileText, Users, UserCheck, Pencil, Trash2, Table, Grid, Plus } from 'lucide-svelte';
+  import { Button } from '$lib/components/ui/button';
+  import { StatusBadge } from '$lib/components/ui/status-badge';
 
   interface User {
     id: number;
@@ -140,33 +142,27 @@ function saveWorkflow() {
       </select>
     </div>
 
-    <button
-  class="flex items-center gap-1 bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm"
-  on:click={openAddWorkflow}
->
-  <Plus class="h-4 w-4" />
-  Add Workflow
-</button>
-
+    <Button onclick={openAddWorkflow}>
+      <Plus class="h-4 w-4" />
+      Add Workflow
+    </Button>
 
     <div class="flex gap-2">
-      <button
-        class="flex items-center gap-1 rounded-md border px-3 py-2 text-sm"
-        class:bg-primary={viewMode === 'table'}
-        class:text-white={viewMode === 'table'}
-        on:click={() => viewMode = 'table'}
+      <Button
+        variant={viewMode === 'table' ? 'default' : 'outline'}
+        size="sm"
+        onclick={() => (viewMode = 'table')}
       >
         <Table class="h-4 w-4" /> Table
-      </button>
+      </Button>
 
-      <button
-        class="flex items-center gap-1 rounded-md border px-3 py-2 text-sm"
-        class:bg-primary={viewMode === 'cards'}
-        class:text-white={viewMode === 'cards'}
-        on:click={() => viewMode = 'cards'}
+      <Button
+        variant={viewMode === 'cards' ? 'default' : 'outline'}
+        size="sm"
+        onclick={() => (viewMode = 'cards')}
       >
         <Grid class="h-4 w-4" /> Pipeline
-      </button>
+      </Button>
     </div>
   </div>
 
@@ -203,12 +199,12 @@ function saveWorkflow() {
         <tr class="hover:bg-muted border-b">
           <td class="px-4 py-3 font-medium">{item.title}</td>
           <td class="px-4 py-3 text-center">{item.department}</td>
-          <td class="px-4 py-3 text-center">{item.status}</td>
+          <td class="px-4 py-3 text-center"><StatusBadge status={item.status} /></td>
           <td class="px-4 py-3 text-center">{item.assignedTo?.name ?? '-'}</td>
           <td class="px-4 py-3 flex justify-end gap-2">
-            <button class="text-white flex items-center gap-1 bg-black p-2 rounded-md border" on:click={() => openAssign(item)}>
+            <Button size="sm" onclick={() => openAssign(item)}>
               <UserCheck class="h-4 w-4" /> Assign
-            </button>
+            </Button>
           </td>
         </tr>
       {/each}
@@ -231,7 +227,7 @@ function saveWorkflow() {
         <div class="flex flex-col gap-3 min-h-[200px]">
           {#each filteredItems.filter(i => i.status === stage) as item}
             <div
-              class="bg-white rounded-md p-3 shadow cursor-move hover:bg-gray-100 border flex flex-col gap-2"
+              class="bg-card hover:bg-muted rounded-md p-3 shadow cursor-move border flex flex-col gap-2 transition-colors"
               draggable="true"
               on:dragstart={() => handleDragStart(item)}
             >
@@ -242,12 +238,9 @@ function saveWorkflow() {
                 </span>
               </div>
               <p class="text-xs text-muted-foreground">{item.department}</p>
-              <button
-                class="text-white flex items-center gap-1 bg-black p-2 rounded-md border text-sm mt-2"
-                on:click={() => openAssign(item)}
-              >
+              <Button size="sm" class="mt-2" onclick={() => openAssign(item)}>
                 <UserCheck class="h-4 w-4" /> Assign
-              </button>
+              </Button>
             </div>
           {/each}
         </div>
@@ -300,19 +293,8 @@ function saveWorkflow() {
       </div>
 
       <div class="mt-6 flex justify-end gap-2">
-        <button
-          class="rounded-md border px-3 py-2 text-sm"
-          on:click={() => (addModal = false)}
-        >
-          Cancel
-        </button>
-
-        <button
-          class="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm"
-          on:click={saveWorkflow}
-        >
-          Create
-        </button>
+        <Button variant="outline" onclick={() => (addModal = false)}>Cancel</Button>
+        <Button onclick={saveWorkflow}>Create</Button>
       </div>
     </div>
   </div>
@@ -333,12 +315,8 @@ function saveWorkflow() {
         </select>
       </div>
       <div class="mt-4 flex justify-end gap-2">
-        <button class="rounded-md border px-3 py-2 text-sm" on:click={() => (assignModal = null, selectedUser = null)}>
-          Cancel
-        </button>
-        <button class="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm" on:click={saveAssign}>
-          Save
-        </button>
+        <Button variant="outline" onclick={() => (assignModal = null, selectedUser = null)}>Cancel</Button>
+        <Button onclick={saveAssign}>Save</Button>
       </div>
     </div>
   </div>

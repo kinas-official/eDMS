@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Building2, Users, Plus, Pencil, Trash2, Table, Grid } from 'lucide-svelte';
+	import { Button } from '$lib/components/ui/button';
 
 	interface User {
 		id: number;
@@ -110,39 +111,29 @@
 	/>
 
 	<div class="flex gap-2">
-		<button
-			class="flex items-center gap-1 rounded-md border px-3 py-2 text-sm"
-			class:bg-primary={viewMode === 'table'}
-			class:text-white={viewMode === 'table'}
-			on:click={() => (viewMode = 'table')}
+		<Button
+			variant={viewMode === 'table' ? 'default' : 'outline'}
+			size="sm"
+			onclick={() => (viewMode = 'table')}
 		>
 			<Table class="h-4 w-4" />
 			Table
-		</button>
+		</Button>
 
-		<button
-			class="flex items-center gap-1 rounded-md border px-3 py-2 text-sm"
-			class:bg-primary={viewMode === 'cards'}
-			class:text-white={viewMode === 'cards'}
-			on:click={() => (viewMode = 'cards')}
+		<Button
+			variant={viewMode === 'cards' ? 'default' : 'outline'}
+			size="sm"
+			onclick={() => (viewMode = 'cards')}
 		>
 			<Grid class="h-4 w-4" />
 			Cards
-		</button>
-		<!-- Header -->
-
-	
-
-
+		</Button>
 	</div>
 
-		<button
-		class="bg-primary text-primary-foreground flex items-center gap-2 rounded-md px-4 py-2"
-		on:click={openCreate}
-	>
+	<Button onclick={openCreate}>
 		<Plus class="h-4 w-4" />
 		New Department
-	</button>
+	</Button>
 </div>
 
 <!-- Empty State -->
@@ -177,7 +168,7 @@
               <button on:click={() => openEdit(dep)}>
                 <Pencil class="h-4 w-4" />
               </button>
-              <button class="text-red-500" on:click={() => removeDepartment(dep.id)}>
+              <button class="text-destructive hover:text-destructive/80" on:click={() => removeDepartment(dep.id)}>
                 <Trash2 class="h-4 w-4" />
               </button>
             </td>
@@ -201,7 +192,7 @@
             <button on:click={() => openEdit(dep)}>
               <Pencil class="h-4 w-4" />
             </button>
-            <button class="text-red-500" on:click={() => removeDepartment(dep.id)}>
+            <button class="text-destructive hover:text-destructive/80" on:click={() => removeDepartment(dep.id)}>
               <Trash2 class="h-4 w-4" />
             </button>
           </div>
@@ -245,18 +236,10 @@
 			</div>
 
 			<div class="mt-4 flex justify-end gap-2">
-				<button
-					class="rounded-md border px-3 py-2 text-sm"
-					on:click={() => ((showCreate = false), (showEdit = null))}
-				>
+				<Button variant="outline" onclick={() => ((showCreate = false), (showEdit = null))}>
 					Cancel
-				</button>
-				<button
-					class="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm"
-					on:click={showEdit ? saveEdit : createDepartment}
-				>
-					Save
-				</button>
+				</Button>
+				<Button onclick={showEdit ? saveEdit : createDepartment}>Save</Button>
 			</div>
 		</div>
 	</div>

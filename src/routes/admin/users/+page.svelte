@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { Users, Building2, Plus, Pencil, Trash2, Table, Grid } from 'lucide-svelte';
+	import { Button } from '$lib/components/ui/button';
+	import { StatusBadge } from '$lib/components/ui/status-badge';
 
 	interface User {
 		id: number;
@@ -150,31 +152,26 @@
 	</div>
 
 	<div class="flex gap-2">
-		<button
-			class="flex items-center gap-1 rounded-md border px-3 py-2 text-sm"
-			class:bg-primary={viewMode === 'table'}
-			class:text-white={viewMode === 'table'}
-			on:click={() => (viewMode = 'table')}
+		<Button
+			variant={viewMode === 'table' ? 'default' : 'outline'}
+			size="sm"
+			onclick={() => (viewMode = 'table')}
 		>
 			<Table class="h-4 w-4" /> Table
-		</button>
+		</Button>
 
-		<button
-			class="flex items-center gap-1 rounded-md border px-3 py-2 text-sm"
-			class:bg-primary={viewMode === 'cards'}
-			class:text-white={viewMode === 'cards'}
-			on:click={() => (viewMode = 'cards')}
+		<Button
+			variant={viewMode === 'cards' ? 'default' : 'outline'}
+			size="sm"
+			onclick={() => (viewMode = 'cards')}
 		>
 			<Grid class="h-4 w-4" /> Cards
-		</button>
+		</Button>
 	</div>
 
-	<button
-		class="bg-primary text-primary-foreground flex items-center gap-1 rounded-md px-4 py-2"
-		on:click={openCreate}
-	>
+	<Button onclick={openCreate}>
 		<Plus class="h-4 w-4" /> New User
-	</button>
+	</Button>
 </div>
 
 <!-- Empty State -->
@@ -204,13 +201,13 @@
 						<td class="px-4 py-3 font-medium">{user.name}</td>
 						<td class="text-muted-foreground px-4 py-3 text-center text-sm">{user.email}</td>
 						<td class="px-4 py-3 text-center">{user.department}</td>
-						<td class="px-4 py-3 text-center">{user.status}</td>
+						<td class="px-4 py-3 text-center"><StatusBadge status={user.status} /></td>
 						<td class="px-4 py-3 text-center">{user.createdAt}</td>
 						<td class="flex justify-end gap-2 px-4 py-3">
-							<button on:click={() => openEdit(user)}>
+							<button class="text-muted-foreground hover:text-foreground" on:click={() => openEdit(user)}>
 								<Pencil class="h-4 w-4" />
 							</button>
-							<button class="text-red-500" on:click={() => removeUser(user.id)}>
+							<button class="text-destructive hover:text-destructive/80" on:click={() => removeUser(user.id)}>
 								<Trash2 class="h-4 w-4" />
 							</button>
 						</td>
@@ -229,10 +226,10 @@
 				<div class="flex items-center justify-between">
 					<h3 class="font-semibold">{user.name}</h3>
 					<div class="flex gap-2">
-						<button on:click={() => openEdit(user)}>
+						<button class="text-muted-foreground hover:text-foreground" on:click={() => openEdit(user)}>
 							<Pencil class="h-4 w-4" />
 						</button>
-						<button class="text-red-500" on:click={() => removeUser(user.id)}>
+						<button class="text-destructive hover:text-destructive/80" on:click={() => removeUser(user.id)}>
 							<Trash2 class="h-4 w-4" />
 						</button>
 					</div>
@@ -243,7 +240,7 @@
 					<Building2 class="inline h-4 w-4" />
 					{user.department}
 				</p>
-				<p class="mt-1 text-sm">{user.status}</p>
+				<p class="mt-2 text-sm"><StatusBadge status={user.status} /></p>
 			</div>
 		{/each}
 	</div>
@@ -290,18 +287,10 @@
 			</div>
 
 			<div class="mt-4 flex justify-end gap-2">
-				<button
-					class="rounded-md border px-3 py-2 text-sm"
-					on:click={() => ((showCreate = false), (showEdit = null))}
-				>
+				<Button variant="outline" onclick={() => ((showCreate = false), (showEdit = null))}>
 					Cancel
-				</button>
-				<button
-					class="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm"
-					on:click={showEdit ? saveEdit : createUser}
-				>
-					Save
-				</button>
+				</Button>
+				<Button onclick={showEdit ? saveEdit : createUser}>Save</Button>
 			</div>
 		</div>
 	</div>

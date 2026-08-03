@@ -4,6 +4,8 @@
 	import mammoth from 'mammoth';
 	import UploadDropzone from '$lib/components/site/UploadDropzone.svelte';
 	import { diffWords } from 'diff';
+	import { Button } from '$lib/components/ui/button';
+	import { StatusBadge } from '$lib/components/ui/status-badge';
 
 	let role = 'admin';
 
@@ -521,25 +523,23 @@
 
 		<!-- View Mode Buttons -->
 		<div class="flex gap-2">
-			<button
-				class="flex items-center gap-1 rounded-md border px-3 py-2 text-sm transition"
-				class:bg-primary={viewMode === 'table'}
-				class:text-white={viewMode === 'table'}
-				on:click={() => (viewMode = 'table')}
+			<Button
+				variant={viewMode === 'table' ? 'default' : 'outline'}
+				size="sm"
+				onclick={() => (viewMode = 'table')}
 			>
 				<Table class="h-4 w-4" />
 				Table
-			</button>
+			</Button>
 
-			<button
-				class="flex items-center gap-1 rounded-md border px-3 py-2 text-sm transition"
-				class:bg-primary={viewMode === 'cards'}
-				class:text-white={viewMode === 'cards'}
-				on:click={() => (viewMode = 'cards')}
+			<Button
+				variant={viewMode === 'cards' ? 'default' : 'outline'}
+				size="sm"
+				onclick={() => (viewMode = 'cards')}
 			>
 				<Grid class="h-4 w-4" />
 				Cards
-			</button>
+			</Button>
 		</div>
 	</div>
 
@@ -564,7 +564,7 @@
 								<td class="px-4 py-3">{doc.id}</td>
 								<td class="px-4 py-3 font-medium">{doc.title}</td>
 								<td class="px-4 py-3">{doc.department}</td>
-								<td class="px-4 py-3">{doc.status}</td>
+								<td class="px-4 py-3"><StatusBadge status={doc.status} /></td>
 								<td class="px-4 py-3">{doc.createdAt}</td>
 								<td class="px-4 py-3">
 									<div class="inline-flex gap-2">
@@ -596,10 +596,10 @@
 										<!-- Delete -->
 										<button
 											disabled={!canDelete(doc)}
-											class="flex rounded-md border border-red-500 px-2 py-1 text-xs text-red-600
+											class="border-destructive/50 text-destructive flex rounded-md border px-2 py-1 text-xs
              transition
-             hover:-translate-y-[1px] hover:border-red-600 hover:bg-red-50
-             hover:text-red-700 hover:shadow-sm"
+             hover:-translate-y-[1px] hover:border-destructive hover:bg-destructive/10
+             hover:shadow-sm disabled:pointer-events-none disabled:opacity-50"
 											on:click={() => deleteDocument(doc)}
 										>
 											<Trash2 class="mr-1 h-4 w-4" /> Delete
@@ -619,9 +619,9 @@
 					<div class="bg-card rounded-xl border p-4 shadow transition hover:shadow-lg">
 						<h3 class="font-semibold">{doc.title}</h3>
 						<p class="text-muted-foreground text-sm">{doc.id}</p>
-						<div class="mt-3 flex justify-between text-sm">
+						<div class="mt-3 flex items-center justify-between text-sm">
 							<span>{doc.department}</span>
-							<span>{doc.status}</span>
+							<StatusBadge status={doc.status} />
 						</div>
 						<p class="text-muted-foreground mt-2 text-xs">{doc.createdAt}</p>
 					</div>
@@ -641,13 +641,13 @@
 <!-- Modal with preview + extra info -->
 {#if showModal}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-		<div class="max-h-[90vh] w-full max-w-[1200px] overflow-auto rounded-xl bg-white p-6 shadow-lg">
+		<div class="max-h-[90vh] w-full max-w-[1200px] overflow-auto bg-card rounded-xl p-6 shadow-lg">
 			<h2 class="mb-4 text-lg font-semibold">Document Details</h2>
 
 			<!-- Modal Preview -->
 			{#if filePreviewUrl || docxHtml}
 				{#if currentFile}
-					<div class="mb-4 max-h-[600px] overflow-auto border bg-gray-50 p-2">
+					<div class="mb-4 max-h-[600px] overflow-auto border bg-muted/50 p-2">
 						{#if currentFile.type.startsWith('image/')}
 							<img src={filePreviewUrl} alt="Preview" class="mx-auto w-full object-contain" />
 						{:else if currentFile.type === 'application/pdf'}
@@ -709,12 +709,8 @@
 
 			<!-- Actions -->
 			<div class="flex justify-end gap-2">
-				<button class="rounded-md border px-3 py-2" on:click={() => (showModal = false)}
-					>Cancel</button
-				>
-				<button class="bg-primary rounded-md px-3 py-2 text-white" on:click={submitForm}
-					>Save</button
-				>
+				<Button variant="outline" onclick={() => (showModal = false)}>Cancel</Button>
+				<Button onclick={submitForm}>Save</Button>
 			</div>
 		</div>
 	</div>
@@ -722,14 +718,14 @@
 
 {#if activeModal === 'view' && activeDoc}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-		<div class="max-h-[90vh] w-full max-w-[1200px] overflow-auto rounded-xl bg-white p-6 shadow-lg">
+		<div class="max-h-[90vh] w-full max-w-[1200px] overflow-auto bg-card rounded-xl p-6 shadow-lg">
 			<div class="mb-4 flex items-center justify-between">
 				<h2 class="text-lg font-semibold">{activeDoc.title}</h2>
 				<button class="text-muted-foreground text-sm" on:click={closeModal}> Close </button>
 			</div>
 
 			<!-- Document preview -->
-			<div class="h-[70vh] overflow-auto rounded-md border bg-gray-50 p-4">
+			<div class="h-[70vh] overflow-auto rounded-md border bg-muted/50 p-4">
 				<!-- reuse your preview logic here -->
 				{#if viewPreviewUrl}
 					<iframe src={viewPreviewUrl} class="h-full w-full rounded-md border" />
@@ -747,7 +743,7 @@
 
 {#if activeModal === 'manage' && activeDoc}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-		<div class="max-h-[90vh] w-full max-w-[1000px] overflow-auto rounded-xl bg-white p-6 shadow-lg">
+		<div class="max-h-[90vh] w-full max-w-[1000px] overflow-auto bg-card rounded-xl p-6 shadow-lg">
 			<div class="mb-4 flex items-center justify-between">
 				<h2 class="text-lg font-semibold">Manage Document</h2>
 				<button class="text-muted-foreground text-sm" on:click={closeModal}> Close </button>
@@ -867,7 +863,7 @@
 							{#each activeDoc.versions as version, i}
 								{#if i === 0}
 									<!-- First version: show full snapshot -->
-									<li class="border-l-2 border-gray-300 pl-2">
+									<li class="border-l-2 border-border pl-2">
 										<div class="text-sm font-medium">
 											Initial version • {new Date(version.timestamp).toLocaleString()}
 										</div>
@@ -890,7 +886,7 @@
 									</li>
 								{:else}
 									<!-- Subsequent versions: show diffs from previous version -->
-									<li class="border-l-2 border-gray-300 pl-2">
+									<li class="border-l-2 border-border pl-2">
 										<div class="text-sm font-medium">
 											Updated • {new Date(version.timestamp).toLocaleString()} • {version.editor}
 										</div>
@@ -957,14 +953,13 @@
 
 			<!-- Actions -->
 			<div class="mt-6 flex justify-end gap-2">
-				<button class="rounded-md border px-3 py-2" on:click={closeModal}> Cancel </button>
-				<button
-					class="bg-primary rounded-md px-3 py-2 text-white"
+				<Button variant="outline" onclick={closeModal}>Cancel</Button>
+				<Button
 					disabled={!canEdit(activeDoc) || activeTab !== 'edit'}
-					on:click={saveDocumentChanges}
+					onclick={saveDocumentChanges}
 				>
 					Save Changes
-				</button>
+				</Button>
 			</div>
 		</div>
 	</div>
