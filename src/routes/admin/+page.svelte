@@ -96,75 +96,79 @@
 	});
 </script>
 
-<div class="min-h-screen space-y-6 p-6 bg-background">
-	
-
+<div class="min-h-screen space-y-8 bg-background">
 	<!-- Quick Actions -->
-	<div class="mb-10 grid grid-cols-2 gap-4 font-bold md:grid-cols-1">
-		<h1 class="font-bold">Quick Actions</h1>
+	<div class="space-y-3">
+		<h2 class="text-sm font-semibold tracking-tight">Quick Actions</h2>
 		<QuickActions actions={quickActions} />
 	</div>
 
-	<!-- KPI Cards + KPI Chart -->
-	<div class="grid grid-cols-1 gap-4 md:grid-cols-4">
-		<div class="grid grid-cols-1 gap-4 md:col-span-4 md:grid-cols-4">
-			<div class="bg-card rounded-xl border p-4 shadow">
-				<div class="flex items-center gap-4">
-					<FileText class="h-8 w-8" />
-					<div>
-						<p class="text-muted-foreground text-sm">Total Documents</p>
-						<p class="text-xl font-bold">{kpis.documents}</p>
-					</div>
+	<!-- KPI Cards -->
+	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
+		<div class="bg-card border-border/60 group rounded-xl border p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+			<div class="flex items-center gap-4">
+				<div class="bg-muted flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors group-hover:bg-foreground/10">
+					<FileText class="h-5 w-5" />
+				</div>
+				<div>
+					<p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Total Documents</p>
+					<p class="text-2xl font-semibold tracking-tight">{kpis.documents}</p>
 				</div>
 			</div>
-			<div class="bg-card rounded-xl border p-4 shadow">
-				<div class="flex items-center gap-4">
-					<Users class="h-8 w-8" />
-					<div>
-						<p class="text-muted-foreground text-sm">Active Employees</p>
-						<p class="text-xl font-bold">{kpis.employees}</p>
-					</div>
+		</div>
+		<div class="bg-card border-border/60 group rounded-xl border p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+			<div class="flex items-center gap-4">
+				<div class="bg-muted flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors group-hover:bg-foreground/10">
+					<Users class="h-5 w-5" />
+				</div>
+				<div>
+					<p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Active Employees</p>
+					<p class="text-2xl font-semibold tracking-tight">{kpis.employees}</p>
 				</div>
 			</div>
-			<div class="bg-card rounded-xl border p-4 shadow">
-				<div class="flex items-center gap-4">
-					<Clock class="h-8 w-8" />
-					<div>
-						<p class="text-muted-foreground text-sm">Pending Reviews</p>
-						<p class="text-xl font-bold">{kpis.pending}</p>
-					</div>
+		</div>
+		<div class="bg-card border-border/60 group rounded-xl border p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+			<div class="flex items-center gap-4">
+				<div class="bg-muted flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors group-hover:bg-foreground/10">
+					<Clock class="h-5 w-5" />
+				</div>
+				<div>
+					<p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Pending Reviews</p>
+					<p class="text-2xl font-semibold tracking-tight">{kpis.pending}</p>
 				</div>
 			</div>
-			<div class="bg-card rounded-xl border p-4 shadow">
-				<div class="flex items-center gap-4">
-					<AlertTriangle class="h-8 w-8" />
-					<div>
-						<p class="text-muted-foreground text-sm">Overdue</p>
-						<p class="text-xl font-bold">{kpis.overdue}</p>
-					</div>
+		</div>
+		<div class="bg-card border-border/60 group rounded-xl border p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+			<div class="flex items-center gap-4">
+				<div class="bg-muted flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors group-hover:bg-foreground/10">
+					<AlertTriangle class="h-5 w-5" />
+				</div>
+				<div>
+					<p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Overdue</p>
+					<p class="text-2xl font-semibold tracking-tight">{kpis.overdue}</p>
 				</div>
 			</div>
 		</div>
 	</div>
 
 	<!-- Charts + Activity -->
-	<div class="mt-6 grid grid-cols-1 gap-6 md:grid-cols-4">
-		<div class="bg-card rounded-xl border p-4 shadow md:col-span-2">
-			<h2 class="mb-4 text-lg font-semibold">Weekly Document Activity</h2>
+	<div class="grid grid-cols-1 gap-4 md:grid-cols-4">
+		<div class="bg-card border-border/60 rounded-xl border p-5 shadow-sm md:col-span-2">
+			<h2 class="mb-4 text-sm font-semibold tracking-tight">Weekly Document Activity</h2>
 			<div class="h-64">
 				<canvas bind:this={activityChart}></canvas>
 			</div>
 		</div>
 
-		<div class="bg-card rounded-xl border p-4 shadow md:col-span-1">
-			<h2 class="mb-4 text-lg font-semibold">Department Load</h2>
+		<div class="bg-card border-border/60 rounded-xl border p-5 shadow-sm md:col-span-1">
+			<h2 class="mb-4 text-sm font-semibold tracking-tight">Department Load</h2>
 			<div class="h-64">
 				<canvas bind:this={departmentChart}></canvas>
 			</div>
 		</div>
 
-		<div class="bg-card rounded-xl border p-4 shadow md:col-span-1">
-			<h3 class="mb-2 text-lg font-semibold">KPI Overview</h3>
+		<div class="bg-card border-border/60 rounded-xl border p-5 shadow-sm md:col-span-1">
+			<h3 class="mb-4 text-sm font-semibold tracking-tight">KPI Overview</h3>
 			<div class="h-64">
 				<canvas bind:this={kpiChart}></canvas>
 			</div>

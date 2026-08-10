@@ -3,12 +3,14 @@
 @custom-variant dark (&:is(.dark *));
 
 
-html{
-  font-family: 'Inter';
+html {
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 :root {
-  --radius: 0.625rem;
+  --radius: 0.75rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -121,4 +123,29 @@ html{
   body {
     @apply bg-background text-foreground;
   }
+  h1, h2, h3 {
+    @apply tracking-tight;
+  }
+  ::selection {
+    @apply bg-foreground/10;
+  }
+}
+
+/* Refined scrollbar for a quieter, more polished feel */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted-foreground);
+  background-clip: content-box;
 }

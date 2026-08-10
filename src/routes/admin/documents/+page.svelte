@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { FileText, Table, Grid, Eye, Settings, Trash2 } from 'lucide-svelte';
+	import { FileText, Table, Grid, Eye, Settings, Trash2, X } from 'lucide-svelte';
 	import mammoth from 'mammoth';
 	import UploadDropzone from '$lib/components/site/UploadDropzone.svelte';
 	import { diffWords } from 'diff';
@@ -492,7 +492,7 @@
 	}
 </script>
 
-<div class="min-h-screen space-y-6 p-6">
+<div class="min-h-screen space-y-6">
 	<!-- Drag-and-Drop Upload -->
 	<UploadDropzone on:select={handleSelect} />
 
@@ -503,16 +503,16 @@
 				type="text"
 				placeholder="Search documents..."
 				bind:value={search}
-				class="rounded-md border px-3 py-2 text-sm"
+				class="border-border/60 focus-visible:ring-ring/50 rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
 			/>
-			<select bind:value={selectedDepartment} class="rounded-md border px-2 py-2 text-sm">
+			<select bind:value={selectedDepartment} class="border-border/60 rounded-lg border bg-transparent px-2 py-2 text-sm shadow-xs">
 				<option>All</option>
 				<option>HR</option>
 				<option>Finance</option>
 				<option>IT</option>
 				<option>Legal</option>
 			</select>
-			<select bind:value={selectedStatus} class="rounded-md border px-2 py-2 text-sm">
+			<select bind:value={selectedStatus} class="border-border/60 rounded-lg border bg-transparent px-2 py-2 text-sm shadow-xs">
 				<option>All</option>
 				<option>Draft</option>
 				<option>Pending</option>
@@ -546,63 +546,52 @@
 	<!-- Document Display -->
 	{#if filteredDocuments.length > 0}
 		{#if viewMode === 'table'}
-			<div class="bg-card overflow-x-auto rounded-xl border">
+			<div class="bg-card border-border/60 overflow-x-auto rounded-xl border shadow-sm">
 				<table class="w-full text-center text-sm">
-					<thead class="border-b">
+					<thead class="border-border/60 border-b">
 						<tr>
-							<th class="px-4 py-3">ID</th>
-							<th class="px-4 py-3">Title</th>
-							<th class="px-4 py-3">Department</th>
-							<th class="px-4 py-3">Status</th>
-							<th class="px-4 py-3">Date</th>
-							<th class="px-4 py-3">Actions</th>
+							<th class="text-muted-foreground px-4 py-3 text-xs font-medium tracking-wide uppercase">ID</th>
+							<th class="text-muted-foreground px-4 py-3 text-xs font-medium tracking-wide uppercase">Title</th>
+							<th class="text-muted-foreground px-4 py-3 text-xs font-medium tracking-wide uppercase">Department</th>
+							<th class="text-muted-foreground px-4 py-3 text-xs font-medium tracking-wide uppercase">Status</th>
+							<th class="text-muted-foreground px-4 py-3 text-xs font-medium tracking-wide uppercase">Date</th>
+							<th class="text-muted-foreground px-4 py-3 text-xs font-medium tracking-wide uppercase">Actions</th>
 						</tr>
 					</thead>
 					<tbody>
 						{#each filteredDocuments as doc}
-							<tr class="hover:bg-muted border-b">
-								<td class="px-4 py-3">{doc.id}</td>
-								<td class="px-4 py-3 font-medium">{doc.title}</td>
-								<td class="px-4 py-3">{doc.department}</td>
-								<td class="px-4 py-3"><StatusBadge status={doc.status} /></td>
-								<td class="px-4 py-3">{doc.createdAt}</td>
-								<td class="px-4 py-3">
+							<tr class="hover:bg-muted/50 border-border/60 border-b transition-colors">
+								<td class="text-muted-foreground px-4 py-3.5">{doc.id}</td>
+								<td class="px-4 py-3.5 font-medium">{doc.title}</td>
+								<td class="px-4 py-3.5">{doc.department}</td>
+								<td class="px-4 py-3.5"><StatusBadge status={doc.status} /></td>
+								<td class="text-muted-foreground px-4 py-3.5">{doc.createdAt}</td>
+								<td class="px-4 py-3.5">
 									<div class="inline-flex gap-2">
 										<!-- View -->
 										<button
-											class="hover:bg-muted hover:border-primary hover:text-primary flex rounded-md border
-             px-2
-             py-1 text-xs
-             transition
-             hover:-translate-y-[1px] hover:shadow-sm"
+											class="hover:bg-muted hover:border-foreground/20 border-border/60 flex items-center rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-all hover:-translate-y-px hover:shadow-sm"
 											on:click={() => viewDocument(doc)}
 										>
-											<Eye class="mr-1 h-4 w-4" /> View
+											<Eye class="mr-1 h-3.5 w-3.5" /> View
 										</button>
 
 										<!-- Manage -->
 										<button
-											class="hover:bg-muted hover:border-primary hover:text-primary flex rounded-md border
-             px-2
-             py-1 text-xs
-             transition hover:-translate-y-[1px] hover:shadow-sm
-             "
+											class="hover:bg-muted hover:border-foreground/20 border-border/60 flex items-center rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-all hover:-translate-y-px hover:shadow-sm"
 											on:click={() => manageDocument(doc)}
 										>
-											<Settings class="mr-1 h-4 w-4" />
+											<Settings class="mr-1 h-3.5 w-3.5" />
 											Manage
 										</button>
 
 										<!-- Delete -->
 										<button
 											disabled={!canDelete(doc)}
-											class="border-destructive/50 text-destructive flex rounded-md border px-2 py-1 text-xs
-             transition
-             hover:-translate-y-[1px] hover:border-destructive hover:bg-destructive/10
-             hover:shadow-sm disabled:pointer-events-none disabled:opacity-50"
+											class="border-destructive/40 text-destructive flex items-center rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-all hover:-translate-y-px hover:border-destructive hover:bg-destructive/10 hover:shadow-sm disabled:pointer-events-none disabled:opacity-50"
 											on:click={() => deleteDocument(doc)}
 										>
-											<Trash2 class="mr-1 h-4 w-4" /> Delete
+											<Trash2 class="mr-1 h-3.5 w-3.5" /> Delete
 										</button>
 									</div>
 								</td>
@@ -616,24 +605,24 @@
 		{#if viewMode === 'cards'}
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
 				{#each filteredDocuments as doc}
-					<div class="bg-card rounded-xl border p-4 shadow transition hover:shadow-lg">
-						<h3 class="font-semibold">{doc.title}</h3>
-						<p class="text-muted-foreground text-sm">{doc.id}</p>
-						<div class="mt-3 flex items-center justify-between text-sm">
-							<span>{doc.department}</span>
+					<div class="bg-card border-border/60 rounded-xl border p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+						<h3 class="font-semibold tracking-tight">{doc.title}</h3>
+						<p class="text-muted-foreground mt-0.5 text-sm">{doc.id}</p>
+						<div class="mt-4 flex items-center justify-between text-sm">
+							<span class="text-muted-foreground">{doc.department}</span>
 							<StatusBadge status={doc.status} />
 						</div>
-						<p class="text-muted-foreground mt-2 text-xs">{doc.createdAt}</p>
+						<p class="text-muted-foreground mt-3 text-xs">{doc.createdAt}</p>
 					</div>
 				{/each}
 			</div>
 		{/if}
 	{:else}
 		<div
-			class="text-muted-foreground bg-card align- flex h-100 flex-col items-center justify-center rounded-xl border text-center"
+			class="text-muted-foreground bg-card border-border/60 flex h-80 flex-col items-center justify-center gap-2 rounded-xl border text-center shadow-sm"
 		>
-			<FileText class="h-16 w-16" />
-			<h1>No documents found matching your filters.</h1>
+			<FileText class="h-12 w-12 opacity-40" />
+			<h1 class="text-sm font-medium">No documents found matching your filters.</h1>
 		</div>
 	{/if}
 </div>
@@ -641,13 +630,13 @@
 <!-- Modal with preview + extra info -->
 {#if showModal}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-		<div class="max-h-[90vh] w-full max-w-[1200px] overflow-auto bg-card rounded-xl p-6 shadow-lg">
+		<div class="max-h-[90vh] w-full max-w-[1200px] overflow-auto bg-card border-border/60 rounded-2xl border p-6 shadow-2xl">
 			<h2 class="mb-4 text-lg font-semibold">Document Details</h2>
 
 			<!-- Modal Preview -->
 			{#if filePreviewUrl || docxHtml}
 				{#if currentFile}
-					<div class="mb-4 max-h-[600px] overflow-auto border bg-muted/50 p-2">
+					<div class="mb-4 max-h-[600px] overflow-auto rounded-xl border-border/60 border bg-muted/50 p-2">
 						{#if currentFile.type.startsWith('image/')}
 							<img src={filePreviewUrl} alt="Preview" class="mx-auto w-full object-contain" />
 						{:else if currentFile.type === 'application/pdf'}
@@ -666,18 +655,18 @@
 			<!-- Metadata Inputs -->
 			<div class="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
 				<div>
-					<label class="mb-1 block text-sm">Title</label>
+					<label class="mb-1.5 block text-sm font-medium">Title</label>
 					<input
 						type="text"
 						bind:value={title}
-						class="w-full rounded-md border px-3 py-2 text-sm"
+						class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
             required
 					/>
 				</div>
 
 				<div>
-					<label class="mb-1 block text-sm">Department</label>
-					<select bind:value={department} class="w-full rounded-md border px-3 py-2 text-sm" required>
+					<label class="mb-1.5 block text-sm font-medium">Department</label>
+					<select bind:value={department} class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2" required>
 						<option value="" disabled>Select department</option>
 						<option>HR</option>
 						<option>Finance</option>
@@ -687,8 +676,8 @@
 				</div>
 
 				<div>
-					<label class="mb-1 block text-sm">Status</label>
-					<select bind:value={status} class="w-full rounded-md border px-3 py-2 text-sm" required>
+					<label class="mb-1.5 block text-sm font-medium">Status</label>
+					<select bind:value={status} class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2" required>
 						<option>Draft</option>
 						<option>Pending</option>
 						<option>Approved</option>
@@ -697,11 +686,11 @@
 				</div>
 
 				<div>
-					<label class="mb-1 block text-sm">Description</label>
+					<label class="mb-1.5 block text-sm font-medium">Description</label>
 					<input
 						type="text"
 						bind:value={description}
-						class="w-full rounded-md border px-3 py-2 text-sm"
+						class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
             required
 					/>
 				</div>
@@ -718,14 +707,16 @@
 
 {#if activeModal === 'view' && activeDoc}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-		<div class="max-h-[90vh] w-full max-w-[1200px] overflow-auto bg-card rounded-xl p-6 shadow-lg">
+		<div class="max-h-[90vh] w-full max-w-[1200px] overflow-auto bg-card border-border/60 rounded-2xl border p-6 shadow-2xl">
 			<div class="mb-4 flex items-center justify-between">
 				<h2 class="text-lg font-semibold">{activeDoc.title}</h2>
-				<button class="text-muted-foreground text-sm" on:click={closeModal}> Close </button>
+				<button class="text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg p-1.5 text-sm transition-colors" on:click={closeModal} aria-label="Close">
+					<X class="h-4 w-4" />
+				</button>
 			</div>
 
 			<!-- Document preview -->
-			<div class="h-[70vh] overflow-auto rounded-md border bg-muted/50 p-4">
+			<div class="h-[70vh] overflow-auto rounded-xl border-border/60 border bg-muted/50 p-4">
 				<!-- reuse your preview logic here -->
 				{#if viewPreviewUrl}
 					<iframe src={viewPreviewUrl} class="h-full w-full rounded-md border" />
@@ -743,22 +734,24 @@
 
 {#if activeModal === 'manage' && activeDoc}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-		<div class="max-h-[90vh] w-full max-w-[1000px] overflow-auto bg-card rounded-xl p-6 shadow-lg">
+		<div class="max-h-[90vh] w-full max-w-[1000px] overflow-auto bg-card border-border/60 rounded-2xl border p-6 shadow-2xl">
 			<div class="mb-4 flex items-center justify-between">
 				<h2 class="text-lg font-semibold">Manage Document</h2>
-				<button class="text-muted-foreground text-sm" on:click={closeModal}> Close </button>
+				<button class="text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg p-1.5 text-sm transition-colors" on:click={closeModal} aria-label="Close">
+					<X class="h-4 w-4" />
+				</button>
 			</div>
 
 			{#if !canEdit(activeDoc)}
-				<div class="mb-4 rounded-md border bg-yellow-50 p-3 text-sm">
+				<div class="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
 					This document is locked and read-only.
 				</div>
 			{/if}
 
 			<!-- Tabs -->
-			<div class="mb-4 flex border-b">
+			<div class="mb-4 flex border-border/60 border-b">
 				<button
-					class="-mb-px border-b-2 px-4 py-2 text-sm font-medium"
+					class="-mb-px border-b-2 border-transparent px-4 py-2 text-sm font-medium transition-colors"
 					class:border-primary={activeTab === 'edit'}
 					class:text-primary={activeTab === 'edit'}
 					class:text-muted-foreground={activeTab !== 'edit'}
@@ -767,7 +760,7 @@
 					Edit
 				</button>
 				<button
-					class="-mb-px border-b-2 px-4 py-2 text-sm font-medium"
+					class="-mb-px border-b-2 border-transparent px-4 py-2 text-sm font-medium transition-colors"
 					class:border-primary={activeTab === 'history'}
 					class:text-primary={activeTab === 'history'}
 					class:text-muted-foreground={activeTab !== 'history'}
@@ -776,7 +769,7 @@
 					Change History
 				</button>
 				<button
-					class="-mb-px border-b-2 px-4 py-2 text-sm font-medium"
+					class="-mb-px border-b-2 border-transparent px-4 py-2 text-sm font-medium transition-colors"
 					class:border-primary={activeTab === 'timeline'}
 					class:text-primary={activeTab === 'timeline'}
 					class:text-muted-foreground={activeTab !== 'timeline'}
@@ -791,9 +784,9 @@
 				{#if activeTab === 'edit'}
 					<div class="space-y-4">
 						<div>
-							<label class="mb-1 block text-sm">Title</label>
+							<label class="mb-1.5 block text-sm font-medium">Title</label>
 							<input
-								class="w-full rounded-md border px-3 py-2 text-sm"
+								class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
 								bind:value={activeDoc.title}
 								disabled={!canEdit(activeDoc)}
                 required
@@ -801,9 +794,9 @@
 						</div>
 
 						<div>
-							<label class="mb-1 block text-sm">Department</label>
+							<label class="mb-1.5 block text-sm font-medium">Department</label>
 							<select
-								class="w-full rounded-md border px-3 py-2 text-sm"
+								class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
 								bind:value={activeDoc.department}
 								disabled={!canEdit(activeDoc)}
                 required
@@ -816,9 +809,9 @@
 						</div>
 
 						<div>
-							<label class="mb-1 block text-sm">Status</label>
+							<label class="mb-1.5 block text-sm font-medium">Status</label>
 							<select
-								class="w-full rounded-md border px-3 py-2 text-sm"
+								class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
 								bind:value={activeDoc.status}
 								disabled={!canEdit(activeDoc)}
                 required

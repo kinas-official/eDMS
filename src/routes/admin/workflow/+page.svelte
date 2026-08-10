@@ -122,18 +122,18 @@ function saveWorkflow() {
 
 </script>
 
-<div class="min-h-screen space-y-6 p-6 bg-background">
+<div class="min-h-screen space-y-6">
   <!-- Filters + View Toggle -->
   <div class="flex flex-wrap gap-4 items-center justify-between">
     <div class="flex gap-2 flex-wrap">
-      <select bind:value={filterDept} class="rounded-md border px-3 py-2 text-sm">
+      <select bind:value={filterDept} class="border-border/60 rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs">
         <option>All</option>
         <option>HR</option>
         <option>Finance</option>
         <option>IT</option>
       </select>
 
-      <select bind:value={filterStatus} class="rounded-md border px-3 py-2 text-sm">
+      <select bind:value={filterStatus} class="border-border/60 rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs">
         <option>All</option>
         <option>Draft</option>
         <option>Pending</option>
@@ -168,40 +168,40 @@ function saveWorkflow() {
 
   <!-- Empty state -->
   {#if filteredItems.length === 0}
-    <div class="bg-card text-muted-foreground rounded-xl border p-8 text-center text-sm">
+    <div class="bg-card text-muted-foreground border-border/60 flex h-80 flex-col items-center justify-center gap-2 rounded-xl border text-center text-sm shadow-sm">
       No workflow items found.
     </div>
   {/if}
 
   <!-- Table view -->
   {#if viewMode === 'table' && filteredItems.length}
-   <div class="bg-card overflow-x-auto rounded-xl border">
+   <div class="bg-card border-border/60 overflow-x-auto rounded-xl border shadow-sm">
   <table class="w-full text-sm table-auto">
-    <thead class="bg-muted/50 border-b">
+    <thead class="border-border/60 border-b">
       <tr>
-        <th class="px-4 py-3 text-left  gap-1">
+        <th class="text-muted-foreground px-4 py-3 text-left text-xs font-medium tracking-wide uppercase">
         Title
         </th>
-        <th class="px-4 py-3 text-center  gap-1">
+        <th class="text-muted-foreground px-4 py-3 text-center text-xs font-medium tracking-wide uppercase">
           Department
         </th>
-        <th class="px-4 py-3 text-center  gap-1">
+        <th class="text-muted-foreground px-4 py-3 text-center text-xs font-medium tracking-wide uppercase">
           Status
         </th>
-        <th class="px-4 py-3 text-center  gap-1">
+        <th class="text-muted-foreground px-4 py-3 text-center text-xs font-medium tracking-wide uppercase">
           Assigned
         </th>
-        <th class="px-4 py-3 text-right">Actions</th>
+        <th class="text-muted-foreground px-4 py-3 text-right text-xs font-medium tracking-wide uppercase">Actions</th>
       </tr>
     </thead>
     <tbody>
       {#each filteredItems as item}
-        <tr class="hover:bg-muted border-b">
-          <td class="px-4 py-3 font-medium">{item.title}</td>
-          <td class="px-4 py-3 text-center">{item.department}</td>
-          <td class="px-4 py-3 text-center"><StatusBadge status={item.status} /></td>
-          <td class="px-4 py-3 text-center">{item.assignedTo?.name ?? '-'}</td>
-          <td class="px-4 py-3 flex justify-end gap-2">
+        <tr class="hover:bg-muted/50 border-border/60 border-b transition-colors">
+          <td class="px-4 py-3.5 font-medium">{item.title}</td>
+          <td class="text-muted-foreground px-4 py-3.5 text-center">{item.department}</td>
+          <td class="px-4 py-3.5 text-center"><StatusBadge status={item.status} /></td>
+          <td class="text-muted-foreground px-4 py-3.5 text-center">{item.assignedTo?.name ?? '-'}</td>
+          <td class="px-4 py-3.5 flex justify-end gap-2">
             <Button size="sm" onclick={() => openAssign(item)}>
               <UserCheck class="h-4 w-4" /> Assign
             </Button>
@@ -219,15 +219,15 @@ function saveWorkflow() {
   <div class="flex gap-4 overflow-x-auto pb-4">
     {#each stages as stage}
       <div
-        class="w-80 bg-card rounded-xl p-4 flex-shrink-0 border border-2"
+        class="w-80 bg-muted/40 border-border/60 rounded-xl p-4 flex-shrink-0 border"
         on:dragover={handleDragOver}
         on:drop={() => handleDrop(stage)}
       >
-        <h3 class="font-semibold mb-4 text-center">{stage}</h3>
+        <h3 class="font-semibold tracking-tight mb-4 text-center text-sm">{stage}</h3>
         <div class="flex flex-col gap-3 min-h-[200px]">
           {#each filteredItems.filter(i => i.status === stage) as item}
             <div
-              class="bg-card hover:bg-muted rounded-md p-3 shadow cursor-move border flex flex-col gap-2 transition-colors"
+              class="bg-card border-border/60 rounded-lg p-3 shadow-sm cursor-move border flex flex-col gap-2 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
               draggable="true"
               on:dragstart={() => handleDragStart(item)}
             >
@@ -253,25 +253,25 @@ function saveWorkflow() {
 
 {#if addModal}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-    <div class="bg-card w-full max-w-md rounded-xl p-6">
+    <div class="bg-card border-border/60 w-full max-w-md rounded-2xl border p-6 shadow-2xl">
       <h2 class="mb-4 text-lg font-semibold">Add Workflow</h2>
 
       <div class="space-y-4">
         <div>
-          <label class="text-sm font-medium">Title</label>
+          <label class="mb-1.5 block text-sm font-medium">Title</label>
           <input
             type="text"
             bind:value={newWorkflow.title}
-            class="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+            class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
             placeholder="Document title"
           />
         </div>
 
         <div>
-          <label class="text-sm font-medium">Department</label>
+          <label class="mb-1.5 block text-sm font-medium">Department</label>
           <select
             bind:value={newWorkflow.department}
-            class="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+            class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
           >
             <option>HR</option>
             <option>Finance</option>
@@ -280,10 +280,10 @@ function saveWorkflow() {
         </div>
 
         <div>
-          <label class="text-sm font-medium">Initial Status</label>
+          <label class="mb-1.5 block text-sm font-medium">Initial Status</label>
           <select
             bind:value={newWorkflow.status}
-            class="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+            class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
           >
             {#each stages as stage}
               <option value={stage}>{stage}</option>
@@ -304,10 +304,10 @@ function saveWorkflow() {
 <!-- Assign Modal -->
 {#if assignModal}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-    <div class="bg-card w-full max-w-md rounded-xl p-6">
+    <div class="bg-card border-border/60 w-full max-w-md rounded-2xl border p-6 shadow-2xl">
       <h2 class="mb-4 text-lg font-semibold">Assign Document</h2>
       <div class="space-y-3">
-        <select bind:value={selectedUser} class="w-full rounded-md border px-3 py-2 text-sm">
+        <select bind:value={selectedUser} class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2">
           <option value={null}>Select user</option>
           {#each users.filter(u => u.department === assignModal!.department) as user}
             <option value={user.id}>{user.name}</option>
