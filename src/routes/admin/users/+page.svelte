@@ -2,6 +2,7 @@
 	import { Users, Building2, Plus, Pencil, Trash2, Table, Grid } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { StatusBadge } from '$lib/components/ui/status-badge';
+	import { ConfirmDialog } from '$lib/components/ui/confirm-dialog';
 
 	interface User {
 		id: number;
@@ -111,9 +112,19 @@
 		showEdit = null;
 	}
 
+	let userPendingDelete: User | null = null;
+
+	function requestRemoveUser(user: User) {
+		userPendingDelete = user;
+	}
+
 	function removeUser(id: number) {
-		if (!confirm('Delete this user?')) return;
 		users = users.filter((u) => u.id !== id);
+	}
+
+	function confirmRemoveUser() {
+		if (userPendingDelete) removeUser(userPendingDelete.id);
+		userPendingDelete = null;
 	}
 
 	$: filteredUsers = users.filter(
@@ -125,7 +136,7 @@
 	);
 </script>
 
-<div class="min-h-screen space-y-6">
+<div class="space-y-6">
 <!-- Search + Filters + View -->
 <div class="mb-4 flex flex-wrap items-center justify-between gap-4">
 	<input
@@ -135,20 +146,26 @@
 		class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2 md:w-64"
 	/>
 
-	<div class="flex gap-2">
-		<select bind:value={filterDept} class="border-border/60 rounded-lg border bg-transparent px-2 py-2 text-sm shadow-xs">
-			<option>All</option>
-			<option>HR</option>
-			<option>IT</option>
-			<option>Finance</option>
-			<option>Legal</option>
-		</select>
+	<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+		<div class="flex items-center gap-2">
+			<label for="user-filter-department" class="text-muted-foreground shrink-0 text-xs font-medium">Department</label>
+			<select id="user-filter-department" bind:value={filterDept} class="border-border/60 rounded-lg border bg-transparent px-2 py-2 text-sm shadow-xs">
+				<option>All</option>
+				<option>HR</option>
+				<option>IT</option>
+				<option>Finance</option>
+				<option>Legal</option>
+			</select>
+		</div>
 
-		<select bind:value={filterStatus} class="border-border/60 rounded-lg border bg-transparent px-2 py-2 text-sm shadow-xs">
-			<option>All</option>
-			<option>Active</option>
-			<option>Inactive</option>
-		</select>
+		<div class="flex items-center gap-2">
+			<label for="user-filter-status" class="text-muted-foreground shrink-0 text-xs font-medium">Status</label>
+			<select id="user-filter-status" bind:value={filterStatus} class="border-border/60 rounded-lg border bg-transparent px-2 py-2 text-sm shadow-xs">
+				<option>All</option>
+				<option>Active</option>
+				<option>Inactive</option>
+			</select>
+		</div>
 	</div>
 
 	<div class="flex gap-2">
@@ -207,7 +224,7 @@
 							<button class="text-muted-foreground hover:bg-muted hover:text-foreground rounded-md p-1.5 transition-colors" on:click={() => openEdit(user)}>
 								<Pencil class="h-4 w-4" />
 							</button>
-							<button class="text-destructive hover:bg-destructive/10 rounded-md p-1.5 transition-colors" on:click={() => removeUser(user.id)}>
+							<button class="text-destructive hover:bg-destructive/10 rounded-md p-1.5 transition-colors" on:click={() => requestRemoveUser(user)}>
 								<Trash2 class="h-4 w-4" />
 							</button>
 						</td>
@@ -229,7 +246,7 @@
 						<button class="text-muted-foreground hover:bg-muted hover:text-foreground rounded-md p-1.5 transition-colors" on:click={() => openEdit(user)}>
 							<Pencil class="h-4 w-4" />
 						</button>
-						<button class="text-destructive hover:bg-destructive/10 rounded-md p-1.5 transition-colors" on:click={() => removeUser(user.id)}>
+						<button class="text-destructive hover:bg-destructive/10 rounded-md p-1.5 transition-colors" on:click={() => requestRemoveUser(user)}>
 							<Trash2 class="h-4 w-4" />
 						</button>
 					</div>
@@ -295,3 +312,12 @@
 		</div>
 	</div>
 {/if}
+
+<ConfirmDialog
+	open={!!userPendingDelete}
+	title="Delete user?"
+	description={userPendingDelete ? `This will permanently remove "${userPendingDelete.name}" from the system.` : ''}
+	confirmText="Delete"
+	onConfirm={confirmRemoveUser}
+	onCancel={() => (userPendingDelete = null)}
+/>

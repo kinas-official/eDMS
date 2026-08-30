@@ -3,6 +3,7 @@
 	import { locales, localizeHref } from '$lib/paraglide/runtime';
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
+	import '$lib/theme';
 
 	let { children } = $props();
 	 import "../app.css";

@@ -6,6 +6,7 @@
 	import { diffWords } from 'diff';
 	import { Button } from '$lib/components/ui/button';
 	import { StatusBadge } from '$lib/components/ui/status-badge';
+	import { ConfirmDialog } from '$lib/components/ui/confirm-dialog';
 
 	let role = 'admin';
 
@@ -186,14 +187,23 @@
 		viewDocxHtml = null;
 	}
 
-	function deleteDocument(doc: DocumentItem) {
-		if (!confirm(`Delete ${doc.title}?`)) return;
+	let docPendingDelete: DocumentItem | null = null;
 
+	function requestDeleteDocument(doc: DocumentItem) {
+		docPendingDelete = doc;
+	}
+
+	function deleteDocument(doc: DocumentItem) {
 		documents = documents.map((d) =>
 			d.id === doc.id ? { ...d, deletedAt: new Date().toISOString() } : d
 		);
 
 		logActivity(doc, 'deleted');
+	}
+
+	function confirmDeleteDocument() {
+		if (docPendingDelete) deleteDocument(docPendingDelete);
+		docPendingDelete = null;
 	}
 
 	function restoreDocument(doc: DocumentItem) {
@@ -492,7 +502,7 @@
 	}
 </script>
 
-<div class="min-h-screen space-y-6">
+<div class="space-y-6">
 	<!-- Drag-and-Drop Upload -->
 	<UploadDropzone on:select={handleSelect} />
 
@@ -505,20 +515,26 @@
 				bind:value={search}
 				class="border-border/60 focus-visible:ring-ring/50 rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
 			/>
-			<select bind:value={selectedDepartment} class="border-border/60 rounded-lg border bg-transparent px-2 py-2 text-sm shadow-xs">
-				<option>All</option>
-				<option>HR</option>
-				<option>Finance</option>
-				<option>IT</option>
-				<option>Legal</option>
-			</select>
-			<select bind:value={selectedStatus} class="border-border/60 rounded-lg border bg-transparent px-2 py-2 text-sm shadow-xs">
-				<option>All</option>
-				<option>Draft</option>
-				<option>Pending</option>
-				<option>Approved</option>
-				<option>Rejected</option>
-			</select>
+			<div class="flex items-center gap-2">
+				<label for="doc-filter-department" class="text-muted-foreground shrink-0 text-xs font-medium">Department</label>
+				<select id="doc-filter-department" bind:value={selectedDepartment} class="border-border/60 rounded-lg border bg-transparent px-2 py-2 text-sm shadow-xs">
+					<option>All</option>
+					<option>HR</option>
+					<option>Finance</option>
+					<option>IT</option>
+					<option>Legal</option>
+				</select>
+			</div>
+			<div class="flex items-center gap-2">
+				<label for="doc-filter-status" class="text-muted-foreground shrink-0 text-xs font-medium">Status</label>
+				<select id="doc-filter-status" bind:value={selectedStatus} class="border-border/60 rounded-lg border bg-transparent px-2 py-2 text-sm shadow-xs">
+					<option>All</option>
+					<option>Draft</option>
+					<option>Pending</option>
+					<option>Approved</option>
+					<option>Rejected</option>
+				</select>
+			</div>
 		</div>
 
 		<!-- View Mode Buttons -->
@@ -589,7 +605,7 @@
 										<button
 											disabled={!canDelete(doc)}
 											class="border-destructive/40 text-destructive flex items-center rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-all hover:-translate-y-px hover:border-destructive hover:bg-destructive/10 hover:shadow-sm disabled:pointer-events-none disabled:opacity-50"
-											on:click={() => deleteDocument(doc)}
+											on:click={() => requestDeleteDocument(doc)}
 										>
 											<Trash2 class="mr-1 h-3.5 w-3.5" /> Delete
 										</button>
@@ -957,6 +973,15 @@
 		</div>
 	</div>
 {/if}
+
+<ConfirmDialog
+	open={!!docPendingDelete}
+	title="Delete document?"
+	description={docPendingDelete ? `This will remove "${docPendingDelete.title}" from the active list. This can be undone by an admin.` : ''}
+	confirmText="Delete"
+	onConfirm={confirmDeleteDocument}
+	onCancel={() => (docPendingDelete = null)}
+/>
 
 <style>
 	.docx-preview table.fancy-table {

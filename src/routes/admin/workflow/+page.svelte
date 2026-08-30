@@ -2,6 +2,25 @@
   import { FileText, Users, UserCheck, Pencil, Trash2, Table, Grid, Plus } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import { StatusBadge } from '$lib/components/ui/status-badge';
+  import { crossfade, fade } from 'svelte/transition';
+  import { flip } from 'svelte/animate';
+  import { cubicOut, quintOut } from 'svelte/easing';
+
+  // Cards leaving one column "fly" into their new column: send/receive match on
+  // the card's uid, so the browser animates the real position delta.
+  const [send, receive] = crossfade({
+    duration: 320,
+    easing: cubicOut,
+    fallback(node) {
+      const style = getComputedStyle(node);
+      const transform = style.transform === 'none' ? '' : style.transform;
+      return {
+        duration: 200,
+        easing: cubicOut,
+        css: (t) => `transform: ${transform} scale(${0.96 + 0.04 * t}); opacity: ${t}`
+      };
+    }
+  });
 
   interface User {
     id: number;
@@ -10,6 +29,7 @@
   }
 
   interface WorkflowItem {
+    uid: number;
     id: string;
     title: string;
     department: string;
@@ -25,12 +45,18 @@
     { id: 4, name: 'Anna Lim', department: 'Finance' }
   ];
 
-  let workflowItems: WorkflowItem[] = [
+  // `id` is not unique in the seed data, so every card carries its own `uid`.
+  // Keyed `{#each}` blocks, the drag/drop animation and the assign modal all
+  // key off `uid`; without it, moving one card moved its twin as well.
+  const seedItems: Omit<WorkflowItem, 'uid'>[] = [
     { id: 'HR-091', title: 'Employee Handbook', department: 'HR', status: 'Draft', createdAt: '2024-12-20' },
-        { id: 'HR-091', title: 'Employee Handbook', department: 'HR', status: 'Draft', createdAt: '2024-12-20' },
+    { id: 'HR-091', title: 'Employee Handbook', department: 'HR', status: 'Draft', createdAt: '2024-12-20' },
     { id: 'FIN-014', title: 'Budget Proposal Q1', department: 'Finance', status: 'Pending', createdAt: '2024-12-21' },
     { id: 'IT-332', title: 'Server Upgrade', department: 'IT', status: 'Reviewed', createdAt: '2024-12-18' }
   ];
+
+  let uidSeq = 0;
+  let workflowItems: WorkflowItem[] = seedItems.map((item) => ({ ...item, uid: ++uidSeq }));
 
   const stages: WorkflowItem['status'][] = ['Draft', 'Pending', 'Reviewed', 'Approved'];
 
@@ -41,22 +67,47 @@
 
   // Drag-and-drop
   let draggedItem: WorkflowItem | null = null;
+  let draggingUid: number | null = null;
+  let dragOverStage: WorkflowItem['status'] | null = null;
 
-  function handleDragStart(item: WorkflowItem) {
+  function handleDragStart(event: DragEvent, item: WorkflowItem) {
     draggedItem = item;
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      // Firefox refuses to start a drag without payload.
+      event.dataTransfer.setData('text/plain', String(item.uid));
+    }
+    // Defer the "lifted" styling by a frame so the browser's drag ghost is a
+    // snapshot of the untouched card, not the dimmed placeholder.
+    requestAnimationFrame(() => (draggingUid = item.uid));
   }
 
-  function handleDragOver(event: DragEvent) {
+  function handleDragEnd() {
+    draggedItem = null;
+    draggingUid = null;
+    dragOverStage = null;
+  }
+
+  function handleDragOver(event: DragEvent, stage: WorkflowItem['status']) {
     event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    dragOverStage = stage;
+  }
+
+  function handleDragLeave(event: DragEvent, stage: WorkflowItem['status']) {
+    // dragleave also fires when crossing into a child element - ignore those.
+    const next = event.relatedTarget as Node | null;
+    if (next && (event.currentTarget as HTMLElement).contains(next)) return;
+    if (dragOverStage === stage) dragOverStage = null;
   }
 
   function handleDrop(stage: WorkflowItem['status']) {
-    if (draggedItem) {
-      workflowItems = workflowItems.map(i =>
-        i.id === draggedItem!.id ? { ...i, status: stage } : i
-      );
-      draggedItem = null;
-    }
+    const item = draggedItem;
+    handleDragEnd();
+    if (!item || item.status === stage) return;
+    workflowItems = workflowItems.map(i =>
+      i.uid === item.uid ? { ...i, status: stage } : i
+    );
   }
 
   // Assign modal
@@ -72,7 +123,7 @@
     if (assignModal && selectedUser != null) {
       const user = users.find(u => u.id === selectedUser);
       workflowItems = workflowItems.map(i =>
-        i.id === assignModal!.id ? { ...i, assignedTo: user } : i
+        i.uid === assignModal!.uid ? { ...i, assignedTo: user } : i
       );
     }
     assignModal = null;
@@ -106,6 +157,7 @@ function saveWorkflow() {
   if (!newWorkflow.title.trim()) return;
 
   const newItem: WorkflowItem = {
+    uid: ++uidSeq,
     id: `${newWorkflow.department}-${Math.floor(Math.random() * 1000)}`,
     title: newWorkflow.title,
     department: newWorkflow.department,
@@ -122,24 +174,30 @@ function saveWorkflow() {
 
 </script>
 
-<div class="min-h-screen space-y-6">
+<div class="space-y-6">
   <!-- Filters + View Toggle -->
   <div class="flex flex-wrap gap-4 items-center justify-between">
-    <div class="flex gap-2 flex-wrap">
-      <select bind:value={filterDept} class="border-border/60 rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs">
-        <option>All</option>
-        <option>HR</option>
-        <option>Finance</option>
-        <option>IT</option>
-      </select>
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div class="flex items-center gap-2">
+        <label for="workflow-filter-department" class="text-muted-foreground shrink-0 text-xs font-medium">Department</label>
+        <select id="workflow-filter-department" bind:value={filterDept} class="border-border/60 rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs">
+          <option>All</option>
+          <option>HR</option>
+          <option>Finance</option>
+          <option>IT</option>
+        </select>
+      </div>
 
-      <select bind:value={filterStatus} class="border-border/60 rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs">
-        <option>All</option>
-        <option>Draft</option>
-        <option>Pending</option>
-        <option>Reviewed</option>
-        <option>Approved</option>
-      </select>
+      <div class="flex items-center gap-2">
+        <label for="workflow-filter-status" class="text-muted-foreground shrink-0 text-xs font-medium">Status</label>
+        <select id="workflow-filter-status" bind:value={filterStatus} class="border-border/60 rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs">
+          <option>All</option>
+          <option>Draft</option>
+          <option>Pending</option>
+          <option>Reviewed</option>
+          <option>Approved</option>
+        </select>
+      </div>
     </div>
 
     <Button onclick={openAddWorkflow}>
@@ -195,7 +253,7 @@ function saveWorkflow() {
       </tr>
     </thead>
     <tbody>
-      {#each filteredItems as item}
+      {#each filteredItems as item (item.uid)}
         <tr class="hover:bg-muted/50 border-border/60 border-b transition-colors">
           <td class="px-4 py-3.5 font-medium">{item.title}</td>
           <td class="text-muted-foreground px-4 py-3.5 text-center">{item.department}</td>
@@ -217,34 +275,63 @@ function saveWorkflow() {
   <!-- Card / Pipeline view -->
  {#if viewMode === 'cards' && filteredItems.length}
   <div class="flex gap-4 overflow-x-auto pb-4">
-    {#each stages as stage}
-      <div
-        class="w-80 bg-muted/40 border-border/60 rounded-xl p-4 flex-shrink-0 border"
-        on:dragover={handleDragOver}
+    {#each stages as stage (stage)}
+      {@const stageItems = filteredItems.filter((i) => i.status === stage)}
+      {@const isTarget = dragOverStage === stage && draggedItem !== null && draggedItem.status !== stage}
+      <ul
+        class={`w-80 flex-shrink-0 rounded-xl border p-4 transition-colors duration-200 ${
+          isTarget
+            ? 'bg-primary/5 border-primary/50 ring-primary/30 ring-2'
+            : 'bg-muted/40 border-border/60'
+        }`}
+        on:dragover={(e) => handleDragOver(e, stage)}
+        on:dragleave={(e) => handleDragLeave(e, stage)}
         on:drop={() => handleDrop(stage)}
       >
-        <h3 class="font-semibold tracking-tight mb-4 text-center text-sm">{stage}</h3>
-        <div class="flex flex-col gap-3 min-h-[200px]">
-          {#each filteredItems.filter(i => i.status === stage) as item}
-            <div
-              class="bg-card border-border/60 rounded-lg p-3 shadow-sm cursor-move border flex flex-col gap-2 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+        <h3 class="mb-4 flex items-center justify-center gap-2 text-center text-sm font-semibold tracking-tight">
+          {stage}
+          <span class="bg-muted-foreground/15 text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium tabular-nums">
+            {stageItems.length}
+          </span>
+        </h3>
+
+        <div class="flex min-h-[200px] flex-col gap-3">
+          {#each stageItems as item (item.uid)}
+            <li
+              class={`bg-card border-border/60 flex cursor-grab list-none flex-col gap-2 rounded-lg border p-3 shadow-sm transition-[box-shadow,opacity] duration-200 hover:shadow-md active:cursor-grabbing ${
+                draggingUid === item.uid ? 'border-dashed opacity-40 shadow-none' : ''
+              }`}
               draggable="true"
-              on:dragstart={() => handleDragStart(item)}
+              on:dragstart={(e) => handleDragStart(e, item)}
+              on:dragend={handleDragEnd}
+              in:receive={{ key: item.uid }}
+              out:send={{ key: item.uid }}
+              animate:flip={{ duration: 320, easing: quintOut }}
             >
-              <div class="flex justify-between items-center">
+              <div class="flex items-center justify-between">
                 <p class="font-medium">{item.title}</p>
-                <span class="text-xs text-muted-foreground flex items-center gap-1">
+                <span class="text-muted-foreground flex items-center gap-1 text-xs">
                   <Users class="h-3 w-3" /> {item.assignedTo?.name ?? 'Unassigned'}
                 </span>
               </div>
-              <p class="text-xs text-muted-foreground">{item.department}</p>
+              <p class="text-muted-foreground text-xs">{item.department}</p>
               <Button size="sm" class="mt-2" onclick={() => openAssign(item)}>
                 <UserCheck class="h-4 w-4" /> Assign
               </Button>
-            </div>
+            </li>
           {/each}
+
+          <!-- Where the card will land -->
+          {#if isTarget}
+            <li
+              class="border-primary/40 bg-primary/5 text-primary/70 flex h-16 list-none items-center justify-center rounded-lg border-2 border-dashed text-xs font-medium"
+              transition:fade={{ duration: 150 }}
+            >
+              Drop to move to {stage}
+            </li>
+          {/if}
         </div>
-      </div>
+      </ul>
     {/each}
   </div>
 {/if}

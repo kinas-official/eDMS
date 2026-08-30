@@ -4,7 +4,7 @@
   import { LayoutDashboard, Folder, Users, Clock, Settings, LogOut, Building, Menu, X } from 'lucide-svelte';
   import { page } from '$app/stores';
   import { derived } from 'svelte/store';
-  import { fly, fade, scale } from 'svelte/transition';
+  import { fade, scale } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
 
   let isCollapsed = false;
@@ -105,6 +105,7 @@
           {#if $currentPath === '/admin/departments'}Departments{/if}
           {#if $currentPath === '/admin/users'}Users{/if}
           {#if $currentPath === '/admin/workflow'}Workflow{/if}
+          {#if $currentPath === '/admin/settings'}Settings{/if}
         </h1>
         <p class="text-muted-foreground hidden text-sm md:mt-0.5 md:block">
           {#if $currentPath === '/admin'}Enterprise Document Management Overview{/if}
@@ -112,15 +113,33 @@
           {#if $currentPath === '/admin/departments'}Manage departments and assigned personnel{/if}
           {#if $currentPath === '/admin/users'}User management and roles{/if}
           {#if $currentPath === '/admin/workflow'}Workflow overview and approvals{/if}
+          {#if $currentPath === '/admin/settings'}System-wide preferences and configuration{/if}
         </p>
       </div>
     </header>
 
     <!-- Animated Slot -->
-    {#key $currentPath}
-      <div class="p-4 md:p-6 md:pt-6" in:fly={{ y: 8, duration: 250, easing: quintOut }} out:fade={{ duration: 120 }}>
-        <slot />
-      </div>
-    {/key}
+    <!-- Grid stack: incoming and outgoing pages share one cell, so nothing is
+         pushed down while the old page fades out. -->
+    <div class="page-stack">
+      {#key $currentPath}
+        <div class="page-stack-item p-4 md:p-6 md:pt-6" in:fade={{ duration: 200, delay: 120, easing: quintOut }} out:fade={{ duration: 120, easing: quintOut }}>
+          <div class="bg-card border-border/60 rounded-2xl border p-4 shadow-sm md:p-6">
+            <slot />
+          </div>
+        </div>
+      {/key}
+    </div>
   </main>
 </div>
+
+<style>
+  .page-stack {
+    display: grid;
+    grid-template-areas: 'stack';
+  }
+  .page-stack-item {
+    grid-area: stack;
+    min-width: 0;
+  }
+</style>

@@ -16,7 +16,7 @@
     try {
       const user = await mockLogin(username, password);
       login(user);
-      goto('/documents');
+      goto(user.role === 'admin' ? '/admin' : '/admin/documents');
     } catch (e) {
       error = (e as Error).message;
     } finally {

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Building2, Users, Plus, Pencil, Trash2, Table, Grid } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
+	import { ConfirmDialog } from '$lib/components/ui/confirm-dialog';
 
 	interface User {
 		id: number;
@@ -89,9 +90,19 @@
 		showEdit = null;
 	}
 
+	let departmentPendingDelete: Department | null = null;
+
+	function requestRemoveDepartment(dep: Department) {
+		departmentPendingDelete = dep;
+	}
+
 	function removeDepartment(id: number) {
-		if (!confirm('Delete this department?')) return;
 		departments = departments.filter((d) => d.id !== id);
+	}
+
+	function confirmRemoveDepartment() {
+		if (departmentPendingDelete) removeDepartment(departmentPendingDelete.id);
+		departmentPendingDelete = null;
 	}
 
 	$: filteredDepartments = departments.filter((d) =>
@@ -100,7 +111,7 @@
 </script>
 
 
-<div class="min-h-screen space-y-6"> 
+<div class="space-y-6"> 
 <!-- Search + View -->
 <div class="mb-4 flex flex-wrap items-center justify-between gap-4">
 	<input
@@ -168,7 +179,7 @@
               <button class="text-muted-foreground hover:bg-muted hover:text-foreground rounded-md p-1.5 transition-colors" on:click={() => openEdit(dep)}>
                 <Pencil class="h-4 w-4" />
               </button>
-              <button class="text-destructive hover:bg-destructive/10 rounded-md p-1.5 transition-colors" on:click={() => removeDepartment(dep.id)}>
+              <button class="text-destructive hover:bg-destructive/10 rounded-md p-1.5 transition-colors" on:click={() => requestRemoveDepartment(dep)}>
                 <Trash2 class="h-4 w-4" />
               </button>
             </td>
@@ -192,7 +203,7 @@
             <button class="text-muted-foreground hover:bg-muted hover:text-foreground rounded-md p-1.5 transition-colors" on:click={() => openEdit(dep)}>
               <Pencil class="h-4 w-4" />
             </button>
-            <button class="text-destructive hover:bg-destructive/10 rounded-md p-1.5 transition-colors" on:click={() => removeDepartment(dep.id)}>
+            <button class="text-destructive hover:bg-destructive/10 rounded-md p-1.5 transition-colors" on:click={() => requestRemoveDepartment(dep)}>
               <Trash2 class="h-4 w-4" />
             </button>
           </div>
@@ -244,3 +255,12 @@
 		</div>
 	</div>
 {/if}
+
+<ConfirmDialog
+	open={!!departmentPendingDelete}
+	title="Delete department?"
+	description={departmentPendingDelete ? `This will permanently remove "${departmentPendingDelete.name}" and unassign its ${departmentPendingDelete.members.length} member(s).` : ''}
+	confirmText="Delete"
+	onConfirm={confirmRemoveDepartment}
+	onCancel={() => (departmentPendingDelete = null)}
+/>
