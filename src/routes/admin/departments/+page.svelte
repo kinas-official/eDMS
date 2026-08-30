@@ -2,48 +2,14 @@
 	import { Building2, Users, Plus, Pencil, Trash2, Table, Grid } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { ConfirmDialog } from '$lib/components/ui/confirm-dialog';
-
-	interface User {
-		id: number;
-		name: string;
-		email: string;
-	}
-
-	interface Department {
-		id: number;
-		name: string;
-		description: string;
-		members: User[];
-		createdAt: string;
-	}
-
-	// Mock data
-	let departments: Department[] = [
-		{
-			id: 1,
-			name: 'HR',
-			description: 'Human Resources',
-			createdAt: '2024-12-10',
-			members: [
-				{ id: 1, name: 'Jane Santos', email: 'jane@company.com' },
-				{ id: 2, name: 'Mark Reyes', email: 'mark@company.com' }
-			]
-		},
-		{
-			id: 2,
-			name: 'IT',
-			description: 'Information Technology',
-			createdAt: '2024-12-12',
-			members: [{ id: 3, name: 'Paul Cruz', email: 'paul@company.com' }]
-		},
-		{
-			id: 3,
-			name: 'Finance',
-			description: 'Finance & Accounting',
-			createdAt: '2024-12-15',
-			members: []
-		}
-	];
+	import {
+		departments,
+		addDepartment,
+		updateDepartment,
+		removeDepartment
+	} from '$lib/departments/store';
+	import type { Department } from '$lib/departments/types';
+	import { logActivity } from '$lib/activity/store';
 
 	let search = '';
 	let viewMode: 'table' | 'cards' = 'table';
@@ -63,16 +29,9 @@
 	}
 
 	function createDepartment() {
-		departments = [
-			...departments,
-			{
-				id: Date.now(),
-				name: formName,
-				description: formDescription,
-				createdAt: new Date().toISOString().split('T')[0],
-				members: []
-			}
-		];
+		if (!formName.trim()) return;
+		addDepartment(formName.trim(), formDescription);
+		logActivity('created', { target: formName.trim(), details: 'Department created' });
 		showCreate = false;
 	}
 
@@ -84,9 +43,8 @@
 
 	function saveEdit() {
 		if (!showEdit) return;
-		departments = departments.map((d) =>
-			d.id === showEdit!.id ? { ...d, name: formName, description: formDescription } : d
-		);
+		updateDepartment(showEdit.id, { name: formName, description: formDescription });
+		logActivity('edited', { target: formName, details: 'Department updated' });
 		showEdit = null;
 	}
 
@@ -96,16 +54,18 @@
 		departmentPendingDelete = dep;
 	}
 
-	function removeDepartment(id: number) {
-		departments = departments.filter((d) => d.id !== id);
-	}
-
 	function confirmRemoveDepartment() {
-		if (departmentPendingDelete) removeDepartment(departmentPendingDelete.id);
+		if (departmentPendingDelete) {
+			logActivity('deleted', {
+				target: departmentPendingDelete.name,
+				details: 'Department deleted'
+			});
+			removeDepartment(departmentPendingDelete.id);
+		}
 		departmentPendingDelete = null;
 	}
 
-	$: filteredDepartments = departments.filter((d) =>
+	$: filteredDepartments = $departments.filter((d) =>
 		d.name.toLowerCase().includes(search.toLowerCase())
 	);
 </script>

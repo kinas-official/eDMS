@@ -7,10 +7,20 @@
 	import { Button } from '$lib/components/ui/button';
 	import { StatusBadge } from '$lib/components/ui/status-badge';
 	import { ConfirmDialog } from '$lib/components/ui/confirm-dialog';
+	import { departmentNames } from '$lib/departments/store';
+	import { settings } from '$lib/settings/store';
+	import { toAcceptAttribute } from '$lib/settings/types';
+	import { logActivity as recordActivity } from '$lib/activity/store';
+	import type { ActivityAction, ActivityLog } from '$lib/activity/types';
 
 	let role = 'admin';
 
-	let systemActivity: ActivityLog[] = [];
+	/** Files the dropzone turned away, shown until the next successful upload. */
+	let uploadErrors: string[] = [];
+
+	function handleReject(event: CustomEvent<{ file: File; reason: string }[]>) {
+		uploadErrors = event.detail.map((r) => `${r.file.name} — ${r.reason}`);
+	}
 
 	let documents: DocumentItem[] = [
 		{
@@ -77,6 +87,7 @@
 	let description = '';
 
 	function handleSelect(event: CustomEvent<File[]>) {
+		uploadErrors = [];
 		currentFile = event.detail[0];
 		files.push(currentFile);
 
@@ -85,11 +96,19 @@
 
 		showModal = true;
 
-		// Pre-fill title from filename
+		// Pre-fill from the filename and the organization defaults in Settings.
 		title = currentFile.name;
-		department = '';
-		status = 'Draft';
+		department = $settings.general.defaultDepartment;
+		status = initialStatus();
 		description = '';
+	}
+
+	/**
+	 * With approval required a new document must start as a Draft; with it off an
+	 * admin can publish straight away.
+	 */
+	function initialStatus(): DocumentStatus {
+		return $settings.documents.requireApproval ? 'Draft' : 'Approved';
 	}
 
 	let docxHtml: string | null = null;
@@ -228,13 +247,7 @@
 		fileText?: string; // text extracted from DOCX/PDF for diffing
 	};
 
-	type ActivityLog = {
-		id: string;
-		action: 'created' | 'edited' | 'approved' | 'rejected' | 'deleted' | 'restored';
-		actor: string;
-		timestamp: string;
-		details?: string;
-	};
+	// `ActivityLog` now comes from $lib/activity/types — the shared audit log.
 
 	type DocumentItem = {
 		id: string;
@@ -344,7 +357,7 @@
 		currentFile = null;
 		title = '';
 		department = '';
-		status = 'Draft';
+		status = initialStatus();
 		description = '';
 	}
 
@@ -413,18 +426,21 @@
 		}));
 	}
 
-	function logActivity(doc: DocumentItem, action: ActivityLog['action'], details?: string) {
-		const entry: ActivityLog = {
-			id: crypto.randomUUID(),
-			action,
-			actor: 'Admin',
-			timestamp: new Date().toISOString(),
-			details
-		};
+	/**
+	 * Writes to the shared, persisted audit log and mirrors the entry onto the
+	 * document's own trail. The per-document trail is part of version history, so
+	 * it follows the "Enable versioning" setting; the system log always records.
+	 */
+	function logActivity(doc: DocumentItem, action: ActivityAction, details?: string) {
+		const entry = recordActivity(action, {
+			details,
+			target: doc.title,
+			targetId: doc.id
+		});
 
-		systemActivity = [entry, ...systemActivity];
-
-		doc.activity = [...(doc.activity ?? []), entry];
+		if ($settings.documents.enableVersioning) {
+			doc.activity = [...(doc.activity ?? []), entry];
+		}
 	}
 
 	let viewPreviewUrl: string | null = null;
@@ -504,7 +520,26 @@
 
 <div class="space-y-6">
 	<!-- Drag-and-Drop Upload -->
-	<UploadDropzone on:select={handleSelect} />
+	<UploadDropzone
+		on:select={handleSelect}
+		on:reject={handleReject}
+		allowedFileTypes={$settings.documents.allowedFileTypes}
+		maxSizeMb={$settings.documents.maxUploadSizeMb}
+	/>
+
+	{#if uploadErrors.length}
+		<div class="border-destructive/30 bg-destructive/5 text-destructive rounded-lg border p-3 text-sm">
+			<p class="font-medium">
+				{uploadErrors.length}
+				{uploadErrors.length === 1 ? 'file was' : 'files were'} not accepted
+			</p>
+			<ul class="mt-1 list-inside list-disc space-y-0.5">
+				{#each uploadErrors as error}
+					<li>{error}</li>
+				{/each}
+			</ul>
+		</div>
+	{/if}
 
 	<!-- Filters + View Toggle -->
 	<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -519,10 +554,9 @@
 				<label for="doc-filter-department" class="text-muted-foreground shrink-0 text-xs font-medium">Department</label>
 				<select id="doc-filter-department" bind:value={selectedDepartment} class="border-border/60 rounded-lg border bg-transparent px-2 py-2 text-sm shadow-xs">
 					<option>All</option>
-					<option>HR</option>
-					<option>Finance</option>
-					<option>IT</option>
-					<option>Legal</option>
+					{#each $departmentNames as name (name)}
+						<option>{name}</option>
+					{/each}
 				</select>
 			</div>
 			<div class="flex items-center gap-2">
@@ -681,24 +715,34 @@
 				</div>
 
 				<div>
-					<label class="mb-1.5 block text-sm font-medium">Department</label>
-					<select bind:value={department} class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2" required>
+					<label class="mb-1.5 block text-sm font-medium" for="new-doc-department">Department</label>
+					<select id="new-doc-department" bind:value={department} class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2" required>
 						<option value="" disabled>Select department</option>
-						<option>HR</option>
-						<option>Finance</option>
-						<option>IT</option>
-						<option>Legal</option>
+						{#each $departmentNames as name (name)}
+							<option>{name}</option>
+						{/each}
 					</select>
 				</div>
 
 				<div>
-					<label class="mb-1.5 block text-sm font-medium">Status</label>
-					<select bind:value={status} class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2" required>
+					<label class="mb-1.5 block text-sm font-medium" for="new-doc-status">Status</label>
+					<select
+						id="new-doc-status"
+						bind:value={status}
+						disabled={$settings.documents.requireApproval}
+						class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2 disabled:opacity-60"
+						required
+					>
 						<option>Draft</option>
 						<option>Pending</option>
 						<option>Approved</option>
 						<option>Rejected</option>
 					</select>
+					{#if $settings.documents.requireApproval}
+						<p class="text-muted-foreground mt-1.5 text-xs">
+							Locked to Draft because “Require approval before publish” is on in Settings.
+						</p>
+					{/if}
 				</div>
 
 				<div>
@@ -775,15 +819,17 @@
 				>
 					Edit
 				</button>
-				<button
-					class="-mb-px border-b-2 border-transparent px-4 py-2 text-sm font-medium transition-colors"
-					class:border-primary={activeTab === 'history'}
-					class:text-primary={activeTab === 'history'}
-					class:text-muted-foreground={activeTab !== 'history'}
-					on:click={() => (activeTab = 'history')}
-				>
-					Change History
-				</button>
+				{#if $settings.documents.enableVersioning}
+					<button
+						class="-mb-px border-b-2 border-transparent px-4 py-2 text-sm font-medium transition-colors"
+						class:border-primary={activeTab === 'history'}
+						class:text-primary={activeTab === 'history'}
+						class:text-muted-foreground={activeTab !== 'history'}
+						on:click={() => (activeTab = 'history')}
+					>
+						Change History
+					</button>
+				{/if}
 				<button
 					class="-mb-px border-b-2 border-transparent px-4 py-2 text-sm font-medium transition-colors"
 					class:border-primary={activeTab === 'timeline'}
@@ -842,13 +888,16 @@
 						<div>
 							{#if canEdit(activeDoc)}
 								<div class="mb-4">
-									<label class="mb-1 block text-sm font-medium">
-										Upload New File (creates new version)
+									<label class="mb-1 block text-sm font-medium" for="doc-replace-file">
+										{$settings.documents.enableVersioning
+											? 'Upload New File (creates new version)'
+											: 'Replace File'}
 									</label>
 
 									<input
+										id="doc-replace-file"
 										type="file"
-										accept=".docx,.pdf,.txt"
+										accept={toAcceptAttribute($settings.documents.allowedFileTypes) || undefined}
 										on:change={handleFileUpdate}
 										class="text-xs"
 									/>
@@ -864,7 +913,7 @@
 					</div>
 				{/if}
 
-				{#if activeTab === 'history'}
+				{#if activeTab === 'history' && $settings.documents.enableVersioning}
 					<h3 class="mb-2 text-sm font-medium">Change History</h3>
 
 					{#if activeDoc.versions?.length}

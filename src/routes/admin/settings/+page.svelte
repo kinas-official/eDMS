@@ -3,29 +3,61 @@
 	import { Switch } from '$lib/components/ui/switch';
 	import { ConfirmDialog } from '$lib/components/ui/confirm-dialog';
 	import { themePreference, setTheme, type ThemePreference } from '$lib/theme';
-	import { Sun, Moon, Monitor, Trash2 } from 'lucide-svelte';
+	import { settings } from '$lib/settings/store';
+	import {
+		DEFAULT_SETTINGS,
+		PERMISSION_LABELS,
+		ROLES,
+		parseAllowedTypes,
+		type Permission,
+		type Role
+	} from '$lib/settings/types';
+	import { departmentNames } from '$lib/departments/store';
+	import { activityLog, clearActivityLog } from '$lib/activity/store';
+	import { ACTIVITY_ACTIONS, type ActivityAction } from '$lib/activity/types';
+	import {
+		applyBackup,
+		describeBackup,
+		downloadBackup,
+		parseBackup,
+		type BackupPayload
+	} from '$lib/backup/backup';
+	import { Sun, Moon, Monitor, Trash2, Download, Upload, RotateCcw } from 'lucide-svelte';
 	import { fade } from 'svelte/transition';
 
-	// General
-	let orgName = 'Acme Corporation';
-	let supportEmail = 'support@acme.com';
-	let defaultDepartment = 'HR';
-	let timezone = 'UTC';
+	/**
+	 * Draft/commit. The page has an explicit Save button, so edits must not reach
+	 * the store — and therefore localStorage — on every keystroke.
+	 */
+	let draft = structuredClone($settings);
+	$: dirty = JSON.stringify(draft) !== JSON.stringify($settings);
 
-	// Documents
-	let maxUploadSizeMb = 25;
-	let allowedFileTypes = '.pdf, .docx, .xlsx, .txt';
-	let enableVersioning = true;
-	let requireApproval = true;
+	let saved = false;
+	let saveTimeout: ReturnType<typeof setTimeout>;
 
-	// Notifications
-	let notifySubmitted = true;
-	let notifyAssigned = true;
-	let weeklyDigest = false;
+	function saveSettings() {
+		settings.set(structuredClone(draft));
+		saved = true;
+		clearTimeout(saveTimeout);
+		saveTimeout = setTimeout(() => (saved = false), 2500);
+	}
 
-	// Security
-	let sessionTimeout = '30';
-	let require2fa = false;
+	function discardChanges() {
+		draft = structuredClone($settings);
+	}
+
+	const sections = [
+		{ id: 'general', label: 'General' },
+		{ id: 'appearance', label: 'Appearance' },
+		{ id: 'documents', label: 'Documents' },
+		{ id: 'retention', label: 'Retention' },
+		{ id: 'roles', label: 'Roles' },
+		{ id: 'notifications', label: 'Notifications' },
+		{ id: 'security', label: 'Security' },
+		{ id: 'audit', label: 'Audit log' },
+		{ id: 'backup', label: 'Backup' },
+		{ id: 'danger', label: 'Danger zone' }
+	];
 
 	const themeOptions: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
 		{ value: 'light', label: 'Light', icon: Sun },
@@ -33,234 +65,623 @@
 		{ value: 'system', label: 'System', icon: Monitor }
 	];
 
-	let saved = false;
-	let saveTimeout: ReturnType<typeof setTimeout>;
+	const timezones = [
+		'UTC',
+		'America/New_York',
+		'America/Los_Angeles',
+		'Asia/Manila',
+		'Europe/London'
+	];
 
-	function saveSettings() {
-		saved = true;
-		clearTimeout(saveTimeout);
-		saveTimeout = setTimeout(() => (saved = false), 2500);
+	// ---- Roles ----------------------------------------------------------------
+
+	function togglePermission(role: Role, permission: Permission, granted: boolean) {
+		const current = new Set(draft.roles[role]);
+		if (granted) current.add(permission);
+		else current.delete(permission);
+		// Keep the stored order stable so the dirty check stays meaningful.
+		draft.roles[role] = PERMISSION_LABELS.map((p) => p.value).filter((p) => current.has(p));
+		draft = draft;
 	}
 
-	let showClearLogsConfirm = false;
+	// ---- Audit log ------------------------------------------------------------
 
-	function clearActivityLogs() {
-		showClearLogsConfirm = false;
+	let actionFilter: ActivityAction | 'All' = 'All';
+	let visibleCount = 20;
+
+	$: filteredActivity = $activityLog.filter(
+		(entry) => actionFilter === 'All' || entry.action === actionFilter
+	);
+
+	// ---- Backup / restore -----------------------------------------------------
+
+	let importInput: HTMLInputElement;
+	let pendingBackup: BackupPayload | null = null;
+	let backupError = '';
+
+	async function handleBackupFile(event: Event) {
+		const file = (event.target as HTMLInputElement).files?.[0];
+		if (!file) return;
+		backupError = '';
+		try {
+			pendingBackup = parseBackup(await file.text());
+		} catch (error) {
+			backupError = error instanceof Error ? error.message : 'Could not read that file.';
+		}
+		// Allow re-picking the same file after a failure.
+		importInput.value = '';
 	}
+
+	function confirmRestore() {
+		if (pendingBackup) {
+			applyBackup(pendingBackup);
+			draft = structuredClone($settings);
+		}
+		pendingBackup = null;
+	}
+
+	// ---- Destructive confirmations -------------------------------------------
+
+	type PendingAction = 'clear-log' | 'reset-settings' | null;
+	let pendingAction: PendingAction = null;
+
+	const confirmCopy: Record<
+		Exclude<PendingAction, null>,
+		{ title: string; description: string; confirmText: string }
+	> = {
+		'clear-log': {
+			title: 'Clear activity log?',
+			description:
+				'This permanently deletes the system-wide activity history. Per-document trails are not affected. This cannot be undone.',
+			confirmText: 'Clear log'
+		},
+		'reset-settings': {
+			title: 'Reset all settings?',
+			description:
+				'Every section returns to its factory default. Documents, departments and the activity log are left alone.',
+			confirmText: 'Reset settings'
+		}
+	};
+
+	function runPendingAction() {
+		if (pendingAction === 'clear-log') clearActivityLog();
+		if (pendingAction === 'reset-settings') {
+			settings.set(structuredClone(DEFAULT_SETTINGS));
+			draft = structuredClone(DEFAULT_SETTINGS);
+		}
+		pendingAction = null;
+	}
+
+	const inputClass =
+		'border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2';
 </script>
 
-<div class="divide-border/60 divide-y">
-	<!-- General -->
-	<section class="pb-6">
-		<h2 class="text-sm font-semibold tracking-tight">General</h2>
-		<p class="text-muted-foreground mt-1 text-sm">Basic information about your organization.</p>
-
-		<div class="mt-4 grid gap-4 sm:grid-cols-2">
-			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="org-name">Organization name</label>
-				<input
-					id="org-name"
-					type="text"
-					bind:value={orgName}
-					class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
-				/>
-			</div>
-			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="support-email">Support email</label>
-				<input
-					id="support-email"
-					type="email"
-					bind:value={supportEmail}
-					class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
-				/>
-			</div>
-			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="default-department">Default department</label>
-				<select
-					id="default-department"
-					bind:value={defaultDepartment}
-					class="border-border/60 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs"
-				>
-					<option>HR</option>
-					<option>Finance</option>
-					<option>IT</option>
-					<option>Legal</option>
-				</select>
-			</div>
-			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="timezone">Time zone</label>
-				<select
-					id="timezone"
-					bind:value={timezone}
-					class="border-border/60 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs"
-				>
-					<option>UTC</option>
-					<option>America/New_York</option>
-					<option>America/Los_Angeles</option>
-					<option>Asia/Manila</option>
-					<option>Europe/London</option>
-				</select>
-			</div>
-		</div>
-	</section>
-
-	<!-- Appearance -->
-	<section class="py-6">
-		<h2 class="text-sm font-semibold tracking-tight">Appearance</h2>
-		<p class="text-muted-foreground mt-1 text-sm">Choose how rDMS looks on this device.</p>
-
-		<div class="mt-4 flex gap-2">
-			{#each themeOptions as option}
-				<Button
-					variant={$themePreference === option.value ? 'default' : 'outline'}
-					size="sm"
-					onclick={() => setTheme(option.value)}
-				>
-					<option.icon class="h-4 w-4" />
-					{option.label}
-				</Button>
+<div class="lg:grid lg:grid-cols-[160px_1fr] lg:gap-10">
+	<!-- Section nav -->
+	<nav class="mb-6 lg:mb-0">
+		<label class="sr-only" for="settings-jump">Jump to section</label>
+		<select
+			id="settings-jump"
+			class={`${inputClass} lg:hidden`}
+			on:change={(e) => {
+				const id = (e.currentTarget as HTMLSelectElement).value;
+				document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+			}}
+		>
+			{#each sections as section (section.id)}
+				<option value={section.id}>{section.label}</option>
 			{/each}
-		</div>
-	</section>
+		</select>
 
-	<!-- Document Management -->
-	<section class="py-6">
-		<h2 class="text-sm font-semibold tracking-tight">Document Management</h2>
-		<p class="text-muted-foreground mt-1 text-sm">Defaults applied to newly uploaded documents.</p>
+		<ul class="sticky top-4 hidden space-y-0.5 text-sm lg:block">
+			{#each sections as section (section.id)}
+				<li>
+					<a
+						href={`#${section.id}`}
+						class="text-muted-foreground hover:bg-muted hover:text-foreground block rounded-md px-3 py-1.5 transition-colors"
+					>
+						{section.label}
+					</a>
+				</li>
+			{/each}
+		</ul>
+	</nav>
 
-		<div class="mt-4 grid gap-4 sm:grid-cols-2">
-			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="max-upload">Max upload size (MB)</label>
-				<input
-					id="max-upload"
-					type="number"
-					min="1"
-					bind:value={maxUploadSizeMb}
-					class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
-				/>
-			</div>
-			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="allowed-types">Allowed file types</label>
-				<input
-					id="allowed-types"
-					type="text"
-					bind:value={allowedFileTypes}
-					class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
-				/>
-			</div>
-		</div>
+	<div class="divide-border/60 min-w-0 divide-y">
+		<!-- General -->
+		<section id="general" class="scroll-mt-4 pb-6">
+			<h2 class="text-sm font-semibold tracking-tight">General</h2>
+			<p class="text-muted-foreground mt-1 text-sm">Basic information about your organization.</p>
 
-		<div class="mt-4 space-y-3">
-			<div class="border-border/60 flex items-center justify-between gap-4 rounded-lg border p-4">
+			<div class="mt-4 grid gap-4 sm:grid-cols-2">
 				<div>
-					<p class="text-sm font-medium">Enable versioning</p>
-					<p class="text-muted-foreground text-sm">Keep a history of every change made to a document.</p>
+					<label class="mb-1.5 block text-sm font-medium" for="org-name">Organization name</label>
+					<input id="org-name" type="text" bind:value={draft.general.orgName} class={inputClass} />
 				</div>
-				<Switch bind:checked={enableVersioning} />
-			</div>
-			<div class="border-border/60 flex items-center justify-between gap-4 rounded-lg border p-4">
 				<div>
-					<p class="text-sm font-medium">Require approval before publish</p>
-					<p class="text-muted-foreground text-sm">New documents stay in Draft until an approver signs off.</p>
+					<label class="mb-1.5 block text-sm font-medium" for="support-email">Support email</label>
+					<input
+						id="support-email"
+						type="email"
+						bind:value={draft.general.supportEmail}
+						class={inputClass}
+					/>
 				</div>
-				<Switch bind:checked={requireApproval} />
-			</div>
-		</div>
-	</section>
-
-	<!-- Notifications -->
-	<section class="py-6">
-		<h2 class="text-sm font-semibold tracking-tight">Notifications</h2>
-		<p class="text-muted-foreground mt-1 text-sm">Choose what you get emailed about.</p>
-
-		<div class="mt-4 space-y-3">
-			<div class="border-border/60 flex items-center justify-between gap-4 rounded-lg border p-4">
 				<div>
-					<p class="text-sm font-medium">Document submitted for review</p>
-					<p class="text-muted-foreground text-sm">Get notified when a document enters your queue.</p>
+					<label class="mb-1.5 block text-sm font-medium" for="default-department">
+						Default department
+					</label>
+					<select id="default-department" bind:value={draft.general.defaultDepartment} class={inputClass}>
+						{#each $departmentNames as name (name)}
+							<option>{name}</option>
+						{/each}
+					</select>
+					<p class="text-muted-foreground mt-1.5 text-xs">
+						Pre-selected when creating documents, users and workflow items. Managed on the
+						Departments page.
+					</p>
 				</div>
-				<Switch bind:checked={notifySubmitted} />
-			</div>
-			<div class="border-border/60 flex items-center justify-between gap-4 rounded-lg border p-4">
 				<div>
-					<p class="text-sm font-medium">Workflow assigned to you</p>
-					<p class="text-muted-foreground text-sm">Get notified when someone assigns you a workflow item.</p>
+					<label class="mb-1.5 block text-sm font-medium" for="timezone">Time zone</label>
+					<select id="timezone" bind:value={draft.general.timezone} class={inputClass}>
+						{#each timezones as zone (zone)}
+							<option>{zone}</option>
+						{/each}
+					</select>
 				</div>
-				<Switch bind:checked={notifyAssigned} />
 			</div>
-			<div class="border-border/60 flex items-center justify-between gap-4 rounded-lg border p-4">
+		</section>
+
+		<!-- Appearance -->
+		<section id="appearance" class="scroll-mt-4 py-6">
+			<h2 class="text-sm font-semibold tracking-tight">Appearance</h2>
+			<p class="text-muted-foreground mt-1 text-sm">
+				Choose how rDMS looks on this device. Applies immediately — it is not part of Save Changes.
+			</p>
+
+			<div class="mt-4 flex gap-2">
+				{#each themeOptions as option (option.value)}
+					<Button
+						variant={$themePreference === option.value ? 'default' : 'outline'}
+						size="sm"
+						onclick={() => setTheme(option.value)}
+					>
+						<option.icon class="h-4 w-4" />
+						{option.label}
+					</Button>
+				{/each}
+			</div>
+		</section>
+
+		<!-- Document Management -->
+		<section id="documents" class="scroll-mt-4 py-6">
+			<h2 class="text-sm font-semibold tracking-tight">Document Management</h2>
+			<p class="text-muted-foreground mt-1 text-sm">Defaults applied to newly uploaded documents.</p>
+
+			<div class="mt-4 grid gap-4 sm:grid-cols-2">
 				<div>
-					<p class="text-sm font-medium">Weekly summary digest</p>
-					<p class="text-muted-foreground text-sm">A weekly email recapping activity across all departments.</p>
+					<label class="mb-1.5 block text-sm font-medium" for="max-upload">
+						Max upload size (MB)
+					</label>
+					<input
+						id="max-upload"
+						type="number"
+						min="1"
+						bind:value={draft.documents.maxUploadSizeMb}
+						class={inputClass}
+					/>
 				</div>
-				<Switch bind:checked={weeklyDigest} />
+				<div>
+					<label class="mb-1.5 block text-sm font-medium" for="allowed-types">
+						Allowed file types
+					</label>
+					<input
+						id="allowed-types"
+						type="text"
+						bind:value={draft.documents.allowedFileTypes}
+						class={inputClass}
+					/>
+					<p class="text-muted-foreground mt-1.5 text-xs">
+						Comma-separated extensions. Enforced by the uploader:
+						{parseAllowedTypes(draft.documents.allowedFileTypes).join(', ') || 'any type allowed'}
+					</p>
+				</div>
 			</div>
-		</div>
-	</section>
 
-	<!-- Security -->
-	<section class="py-6">
-		<h2 class="text-sm font-semibold tracking-tight">Security</h2>
-		<p class="text-muted-foreground mt-1 text-sm">Session and authentication policies.</p>
+			<div class="mt-4 space-y-3">
+				<div class="border-border/60 flex items-center justify-between gap-4 rounded-lg border p-4">
+					<div>
+						<p class="text-sm font-medium">Enable versioning</p>
+						<p class="text-muted-foreground text-sm">
+							Keep a history of every change made to a document.
+						</p>
+					</div>
+					<Switch bind:checked={draft.documents.enableVersioning} />
+				</div>
+				<div class="border-border/60 flex items-center justify-between gap-4 rounded-lg border p-4">
+					<div>
+						<p class="text-sm font-medium">Require approval before publish</p>
+						<p class="text-muted-foreground text-sm">
+							New documents stay in Draft until an approver signs off.
+						</p>
+					</div>
+					<Switch bind:checked={draft.documents.requireApproval} />
+				</div>
+			</div>
+		</section>
 
-		<div class="mt-4 grid gap-4 sm:grid-cols-2">
-			<div>
-				<label class="mb-1.5 block text-sm font-medium" for="session-timeout">Session timeout</label>
-				<select
-					id="session-timeout"
-					bind:value={sessionTimeout}
-					class="border-border/60 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs"
+		<!-- Retention -->
+		<section id="retention" class="scroll-mt-4 py-6">
+			<h2 class="text-sm font-semibold tracking-tight">Retention &amp; Archival</h2>
+			<p class="text-muted-foreground mt-1 text-sm">
+				How long documents stay active, and how long deleted ones are recoverable.
+			</p>
+
+			<div class="mt-4 space-y-3">
+				<div class="border-border/60 flex items-center justify-between gap-4 rounded-lg border p-4">
+					<div>
+						<p class="text-sm font-medium">Auto-archive inactive documents</p>
+						<p class="text-muted-foreground text-sm">
+							Move untouched documents out of the active list automatically.
+						</p>
+					</div>
+					<Switch bind:checked={draft.retention.autoArchiveEnabled} />
+				</div>
+			</div>
+
+			<div class="mt-4 grid gap-4 sm:grid-cols-2">
+				<div>
+					<label class="mb-1.5 block text-sm font-medium" for="archive-after">
+						Archive after (days)
+					</label>
+					<input
+						id="archive-after"
+						type="number"
+						min="1"
+						disabled={!draft.retention.autoArchiveEnabled}
+						bind:value={draft.retention.archiveAfterDays}
+						class={`${inputClass} disabled:opacity-60`}
+					/>
+				</div>
+				<div>
+					<label class="mb-1.5 block text-sm font-medium" for="purge-after">
+						Purge deleted after (days)
+					</label>
+					<input
+						id="purge-after"
+						type="number"
+						min="1"
+						bind:value={draft.retention.purgeDeletedAfterDays}
+						class={inputClass}
+					/>
+					<p class="text-muted-foreground mt-1.5 text-xs">
+						Deleted documents stay restorable for this long before they are removed for good.
+					</p>
+				</div>
+			</div>
+		</section>
+
+		<!-- Roles & Permissions -->
+		<section id="roles" class="scroll-mt-4 py-6">
+			<h2 class="text-sm font-semibold tracking-tight">Roles &amp; Permissions</h2>
+			<p class="text-muted-foreground mt-1 text-sm">
+				What each role is allowed to do. Assign a role to a person on the Users page.
+			</p>
+
+			<div class="border-border/60 mt-4 overflow-x-auto rounded-lg border">
+				<table class="w-full text-sm">
+					<thead class="border-border/60 bg-muted/40 border-b">
+						<tr>
+							<th class="text-muted-foreground px-4 py-3 text-left text-xs font-medium tracking-wide uppercase">
+								Permission
+							</th>
+							{#each ROLES as role (role)}
+								<th class="text-muted-foreground px-4 py-3 text-center text-xs font-medium tracking-wide uppercase">
+									{role}
+								</th>
+							{/each}
+						</tr>
+					</thead>
+					<tbody>
+						{#each PERMISSION_LABELS as permission (permission.value)}
+							<tr class="border-border/60 border-b last:border-0">
+								<td class="px-4 py-3">
+									<p class="font-medium">{permission.label}</p>
+									<p class="text-muted-foreground text-xs">{permission.description}</p>
+								</td>
+								{#each ROLES as role (role)}
+									<td class="px-4 py-3 text-center">
+										<input
+											type="checkbox"
+											class="accent-primary h-4 w-4 align-middle disabled:opacity-50"
+											aria-label={`${permission.label} for ${role}`}
+											checked={draft.roles[role].includes(permission.value)}
+											disabled={role === 'admin'}
+											on:change={(e) =>
+												togglePermission(role, permission.value, e.currentTarget.checked)}
+										/>
+									</td>
+								{/each}
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+			<p class="text-muted-foreground mt-2 text-xs">
+				The admin row is fixed — removing an admin's own permissions would lock everyone out of
+				this page.
+			</p>
+		</section>
+
+		<!-- Notifications -->
+		<section id="notifications" class="scroll-mt-4 py-6">
+			<h2 class="text-sm font-semibold tracking-tight">Notifications</h2>
+			<p class="text-muted-foreground mt-1 text-sm">Choose what you get emailed about.</p>
+			<p class="border-border/60 bg-muted/40 text-muted-foreground mt-3 rounded-lg border p-3 text-xs">
+				These preferences are saved, but no mail is delivered yet — the app has no mail transport
+				configured.
+			</p>
+
+			<div class="mt-4 space-y-3">
+				<div class="border-border/60 flex items-center justify-between gap-4 rounded-lg border p-4">
+					<div>
+						<p class="text-sm font-medium">Document submitted for review</p>
+						<p class="text-muted-foreground text-sm">
+							Get notified when a document enters your queue.
+						</p>
+					</div>
+					<Switch bind:checked={draft.notifications.notifySubmitted} />
+				</div>
+				<div class="border-border/60 flex items-center justify-between gap-4 rounded-lg border p-4">
+					<div>
+						<p class="text-sm font-medium">Workflow assigned to you</p>
+						<p class="text-muted-foreground text-sm">
+							Get notified when someone assigns you a workflow item.
+						</p>
+					</div>
+					<Switch bind:checked={draft.notifications.notifyAssigned} />
+				</div>
+				<div class="border-border/60 flex items-center justify-between gap-4 rounded-lg border p-4">
+					<div>
+						<p class="text-sm font-medium">Weekly summary digest</p>
+						<p class="text-muted-foreground text-sm">
+							A weekly email recapping activity across all departments.
+						</p>
+					</div>
+					<Switch bind:checked={draft.notifications.weeklyDigest} />
+				</div>
+			</div>
+		</section>
+
+		<!-- Security -->
+		<section id="security" class="scroll-mt-4 py-6">
+			<h2 class="text-sm font-semibold tracking-tight">Security</h2>
+			<p class="text-muted-foreground mt-1 text-sm">Session and authentication policies.</p>
+
+			<div class="mt-4 grid gap-4 sm:grid-cols-2">
+				<div>
+					<label class="mb-1.5 block text-sm font-medium" for="session-timeout">
+						Session timeout
+					</label>
+					<select
+						id="session-timeout"
+						bind:value={draft.security.sessionTimeoutMinutes}
+						class={inputClass}
+					>
+						<option value={15}>15 minutes</option>
+						<option value={30}>30 minutes</option>
+						<option value={60}>1 hour</option>
+						<option value={480}>8 hours</option>
+					</select>
+					<p class="text-muted-foreground mt-1.5 text-xs">
+						Signed out automatically after this long without activity.
+					</p>
+				</div>
+			</div>
+
+			<div class="mt-4">
+				<div class="border-border/60 flex items-center justify-between gap-4 rounded-lg border p-4 opacity-70">
+					<div>
+						<p class="text-sm font-medium">Require two-factor authentication for admins</p>
+						<p class="text-muted-foreground text-sm">
+							Unavailable — sign-in currently runs against a mock user list with no second factor.
+						</p>
+					</div>
+					<Switch bind:checked={draft.security.require2fa} disabled />
+				</div>
+			</div>
+		</section>
+
+		<!-- Audit log -->
+		<section id="audit" class="scroll-mt-4 py-6">
+			<div class="flex flex-wrap items-start justify-between gap-4">
+				<div>
+					<h2 class="text-sm font-semibold tracking-tight">Audit Log</h2>
+					<p class="text-muted-foreground mt-1 text-sm">
+						System-wide record of what changed, newest first.
+					</p>
+				</div>
+				<div class="flex items-center gap-2">
+					<label class="text-muted-foreground shrink-0 text-xs font-medium" for="audit-filter">
+						Action
+					</label>
+					<select
+						id="audit-filter"
+						bind:value={actionFilter}
+						class="border-border/60 rounded-lg border bg-transparent px-2 py-2 text-sm shadow-xs"
+					>
+						<option value="All">All</option>
+						{#each ACTIVITY_ACTIONS as action (action)}
+							<option value={action}>{action}</option>
+						{/each}
+					</select>
+				</div>
+			</div>
+
+			{#if filteredActivity.length === 0}
+				<p
+					class="border-border/60 text-muted-foreground mt-4 rounded-lg border border-dashed p-6 text-center text-sm"
 				>
-					<option value="15">15 minutes</option>
-					<option value="30">30 minutes</option>
-					<option value="60">1 hour</option>
-					<option value="480">8 hours</option>
-				</select>
-			</div>
-		</div>
-
-		<div class="mt-4">
-			<div class="border-border/60 flex items-center justify-between gap-4 rounded-lg border p-4">
-				<div>
-					<p class="text-sm font-medium">Require two-factor authentication for admins</p>
-					<p class="text-muted-foreground text-sm">Admin accounts must verify with a second factor at sign-in.</p>
+					Nothing recorded yet.
+				</p>
+			{:else}
+				<div class="border-border/60 mt-4 overflow-x-auto rounded-lg border">
+					<table class="w-full text-sm">
+						<thead class="border-border/60 bg-muted/40 border-b">
+							<tr>
+								<th class="text-muted-foreground px-4 py-3 text-left text-xs font-medium tracking-wide uppercase">
+									When
+								</th>
+								<th class="text-muted-foreground px-4 py-3 text-left text-xs font-medium tracking-wide uppercase">
+									Action
+								</th>
+								<th class="text-muted-foreground px-4 py-3 text-left text-xs font-medium tracking-wide uppercase">
+									Target
+								</th>
+								<th class="text-muted-foreground px-4 py-3 text-left text-xs font-medium tracking-wide uppercase">
+									Actor
+								</th>
+								<th class="text-muted-foreground px-4 py-3 text-left text-xs font-medium tracking-wide uppercase">
+									Details
+								</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each filteredActivity.slice(0, visibleCount) as entry (entry.id)}
+								<tr class="border-border/60 border-b last:border-0">
+									<td class="text-muted-foreground px-4 py-3 whitespace-nowrap">
+										{new Date(entry.timestamp).toLocaleString()}
+									</td>
+									<td class="px-4 py-3">
+										<span class="bg-muted rounded-full px-2 py-0.5 text-xs font-medium capitalize">
+											{entry.action}
+										</span>
+									</td>
+									<td class="px-4 py-3">{entry.target ?? '—'}</td>
+									<td class="text-muted-foreground px-4 py-3">{entry.actor}</td>
+									<td class="text-muted-foreground px-4 py-3">{entry.details ?? '—'}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
 				</div>
-				<Switch bind:checked={require2fa} />
-			</div>
-		</div>
-	</section>
 
-	<!-- Danger Zone -->
-	<section class="pt-6">
-		<h2 class="text-destructive text-sm font-semibold tracking-tight">Danger Zone</h2>
-		<p class="text-muted-foreground mt-1 text-sm">Irreversible actions — proceed with caution.</p>
+				<div class="mt-3 flex items-center justify-between gap-4">
+					<p class="text-muted-foreground text-xs">
+						Showing {Math.min(visibleCount, filteredActivity.length)} of {filteredActivity.length}
+					</p>
+					{#if visibleCount < filteredActivity.length}
+						<Button variant="outline" size="sm" onclick={() => (visibleCount += 20)}>
+							Show more
+						</Button>
+					{/if}
+				</div>
+			{/if}
+		</section>
 
-		<div class="border-destructive/30 bg-destructive/5 mt-4 flex items-center justify-between gap-4 rounded-lg border p-4">
-			<div>
-				<p class="text-sm font-medium">Clear activity log</p>
-				<p class="text-muted-foreground text-sm">Permanently deletes the system-wide activity history.</p>
+		<!-- Backup -->
+		<section id="backup" class="scroll-mt-4 py-6">
+			<h2 class="text-sm font-semibold tracking-tight">Backup &amp; Restore</h2>
+			<p class="text-muted-foreground mt-1 text-sm">
+				All data lives in this browser. Export a copy before clearing site data or moving machines.
+			</p>
+			<p class="border-border/60 bg-muted/40 text-muted-foreground mt-3 rounded-lg border p-3 text-xs">
+				Includes settings, departments, documents and the audit log. Users and workflow items are
+				still page-local mock data and are not captured.
+			</p>
+
+			<div class="mt-4 flex flex-wrap gap-2">
+				<Button variant="outline" size="sm" onclick={() => downloadBackup()}>
+					<Download class="h-4 w-4" /> Export backup
+				</Button>
+				<Button variant="outline" size="sm" onclick={() => importInput.click()}>
+					<Upload class="h-4 w-4" /> Restore from file
+				</Button>
+				<input
+					bind:this={importInput}
+					type="file"
+					accept="application/json,.json"
+					class="hidden"
+					on:change={handleBackupFile}
+				/>
 			</div>
-			<Button variant="destructive" size="sm" onclick={() => (showClearLogsConfirm = true)}>
-				<Trash2 class="h-4 w-4" />
-				Clear log
-			</Button>
-		</div>
-	</section>
+
+			{#if backupError}
+				<p class="border-destructive/30 bg-destructive/5 text-destructive mt-3 rounded-lg border p-3 text-sm">
+					{backupError}
+				</p>
+			{/if}
+		</section>
+
+		<!-- Danger Zone -->
+		<section id="danger" class="scroll-mt-4 pt-6">
+			<h2 class="text-destructive text-sm font-semibold tracking-tight">Danger Zone</h2>
+			<p class="text-muted-foreground mt-1 text-sm">Irreversible actions — proceed with caution.</p>
+
+			<div class="mt-4 space-y-3">
+				<div
+					class="border-destructive/30 bg-destructive/5 flex flex-wrap items-center justify-between gap-4 rounded-lg border p-4"
+				>
+					<div>
+						<p class="text-sm font-medium">Clear activity log</p>
+						<p class="text-muted-foreground text-sm">
+							Permanently deletes the system-wide activity history ({$activityLog.length} entries).
+						</p>
+					</div>
+					<Button variant="destructive" size="sm" onclick={() => (pendingAction = 'clear-log')}>
+						<Trash2 class="h-4 w-4" />
+						Clear log
+					</Button>
+				</div>
+
+				<div
+					class="border-destructive/30 bg-destructive/5 flex flex-wrap items-center justify-between gap-4 rounded-lg border p-4"
+				>
+					<div>
+						<p class="text-sm font-medium">Reset all settings</p>
+						<p class="text-muted-foreground text-sm">
+							Returns every section on this page to its factory default.
+						</p>
+					</div>
+					<Button variant="destructive" size="sm" onclick={() => (pendingAction = 'reset-settings')}>
+						<RotateCcw class="h-4 w-4" />
+						Reset
+					</Button>
+				</div>
+			</div>
+		</section>
+	</div>
 </div>
 
 <!-- Save bar -->
 <div class="border-border/60 mt-6 flex items-center justify-end gap-3 border-t pt-6">
 	{#if saved}
 		<p class="text-muted-foreground text-sm" transition:fade={{ duration: 150 }}>Settings saved</p>
+	{:else if dirty}
+		<p class="text-muted-foreground text-sm" transition:fade={{ duration: 150 }}>
+			You have unsaved changes
+		</p>
 	{/if}
-	<Button onclick={saveSettings}>Save Changes</Button>
+	<Button variant="outline" disabled={!dirty} onclick={discardChanges}>Discard</Button>
+	<Button disabled={!dirty} onclick={saveSettings}>Save Changes</Button>
 </div>
 
 <ConfirmDialog
-	open={showClearLogsConfirm}
-	title="Clear activity log?"
-	description="This will permanently delete the system-wide activity history. This cannot be undone."
-	confirmText="Clear log"
-	onConfirm={clearActivityLogs}
-	onCancel={() => (showClearLogsConfirm = false)}
+	open={pendingAction !== null}
+	title={pendingAction ? confirmCopy[pendingAction].title : ''}
+	description={pendingAction ? confirmCopy[pendingAction].description : ''}
+	confirmText={pendingAction ? confirmCopy[pendingAction].confirmText : ''}
+	onConfirm={runPendingAction}
+	onCancel={() => (pendingAction = null)}
+/>
+
+<ConfirmDialog
+	open={pendingBackup !== null}
+	title="Restore this backup?"
+	description={pendingBackup
+		? `${describeBackup(pendingBackup)}. Restoring overwrites your current settings, departments, documents and audit log.`
+		: ''}
+	confirmText="Restore"
+	onConfirm={confirmRestore}
+	onCancel={() => (pendingBackup = null)}
 />

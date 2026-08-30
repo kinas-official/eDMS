@@ -2,6 +2,9 @@
   import { FileText, Users, UserCheck, Pencil, Trash2, Table, Grid, Plus } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import { StatusBadge } from '$lib/components/ui/status-badge';
+  import { departmentNames } from '$lib/departments/store';
+  import { settings } from '$lib/settings/store';
+  import { logActivity } from '$lib/activity/store';
   import { crossfade, fade } from 'svelte/transition';
   import { flip } from 'svelte/animate';
   import { cubicOut, quintOut } from 'svelte/easing';
@@ -108,6 +111,11 @@
     workflowItems = workflowItems.map(i =>
       i.uid === item.uid ? { ...i, status: stage } : i
     );
+    logActivity(stage === 'Approved' ? 'approved' : 'edited', {
+      target: item.title,
+      targetId: item.id,
+      details: `Moved from ${item.status} to ${stage}`
+    });
   }
 
   // Assign modal
@@ -150,6 +158,13 @@ let newWorkflow: {
 };
 
 function openAddWorkflow() {
+  // Settings decide where a new item starts: with approval required it must
+  // begin as a Draft, otherwise an admin may create it already Approved.
+  newWorkflow = {
+    title: '',
+    department: $settings.general.defaultDepartment,
+    status: $settings.documents.requireApproval ? 'Draft' : 'Approved'
+  };
   addModal = true;
 }
 
@@ -166,9 +181,12 @@ function saveWorkflow() {
   };
 
   workflowItems = [newItem, ...workflowItems];
+  logActivity('created', {
+    target: newItem.title,
+    targetId: newItem.id,
+    details: `Workflow item created in ${newItem.status}`
+  });
 
-  // reset
-  newWorkflow = { title: '', department: 'HR', status: 'Draft' };
   addModal = false;
 }
 
@@ -182,9 +200,9 @@ function saveWorkflow() {
         <label for="workflow-filter-department" class="text-muted-foreground shrink-0 text-xs font-medium">Department</label>
         <select id="workflow-filter-department" bind:value={filterDept} class="border-border/60 rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs">
           <option>All</option>
-          <option>HR</option>
-          <option>Finance</option>
-          <option>IT</option>
+          {#each $departmentNames as name (name)}
+            <option>{name}</option>
+          {/each}
         </select>
       </div>
 
@@ -279,7 +297,7 @@ function saveWorkflow() {
       {@const stageItems = filteredItems.filter((i) => i.status === stage)}
       {@const isTarget = dragOverStage === stage && draggedItem !== null && draggedItem.status !== stage}
       <ul
-        class={`w-80 flex-shrink-0 rounded-xl border p-4 transition-colors duration-200 ${
+        class={`min-w-[17rem] flex-1 rounded-xl border p-4 transition-colors duration-200 ${
           isTarget
             ? 'bg-primary/5 border-primary/50 ring-primary/30 ring-2'
             : 'bg-muted/40 border-border/60'
@@ -345,8 +363,9 @@ function saveWorkflow() {
 
       <div class="space-y-4">
         <div>
-          <label class="mb-1.5 block text-sm font-medium">Title</label>
+          <label class="mb-1.5 block text-sm font-medium" for="workflow-title">Title</label>
           <input
+            id="workflow-title"
             type="text"
             bind:value={newWorkflow.title}
             class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
@@ -355,27 +374,35 @@ function saveWorkflow() {
         </div>
 
         <div>
-          <label class="mb-1.5 block text-sm font-medium">Department</label>
+          <label class="mb-1.5 block text-sm font-medium" for="workflow-department">Department</label>
           <select
+            id="workflow-department"
             bind:value={newWorkflow.department}
             class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
           >
-            <option>HR</option>
-            <option>Finance</option>
-            <option>IT</option>
+            {#each $departmentNames as name (name)}
+              <option>{name}</option>
+            {/each}
           </select>
         </div>
 
         <div>
-          <label class="mb-1.5 block text-sm font-medium">Initial Status</label>
+          <label class="mb-1.5 block text-sm font-medium" for="workflow-status">Initial Status</label>
           <select
+            id="workflow-status"
             bind:value={newWorkflow.status}
-            class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
+            disabled={$settings.documents.requireApproval}
+            class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2 disabled:opacity-60"
           >
             {#each stages as stage}
               <option value={stage}>{stage}</option>
             {/each}
           </select>
+          {#if $settings.documents.requireApproval}
+            <p class="text-muted-foreground mt-1.5 text-xs">
+              Locked to Draft because “Require approval before publish” is on in Settings.
+            </p>
+          {/if}
         </div>
       </div>
 

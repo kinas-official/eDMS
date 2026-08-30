@@ -6,6 +6,12 @@
   import { derived } from 'svelte/store';
   import { fade, scale } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
+  import { browser } from '$app/environment';
+  import { goto } from '$app/navigation';
+  import { onDestroy, onMount } from 'svelte';
+  import { currentUser, logout } from '$lib/auth/store';
+  import { requireAdmin } from '$lib/auth/guards';
+  import { settings } from '$lib/settings/store';
 
   let isCollapsed = false;
   let mobileOpen = false;
@@ -13,6 +19,39 @@
 
   // Close the mobile drawer whenever navigation happens
   $: if ($currentPath) mobileOpen = false;
+
+  // ---- Access control -------------------------------------------------------
+  // The session lives in localStorage, so this has to run on the client; a
+  // server-side load would see no user at all and bounce every admin.
+  let redirecting = false;
+  $: authorized = browser && requireAdmin($currentUser);
+
+  $: if (browser && !authorized && !redirecting) {
+    redirecting = true;
+    goto('/login');
+  }
+
+  // ---- Idle session timeout -------------------------------------------------
+  let idleTimer: ReturnType<typeof setTimeout>;
+
+  function endSession() {
+    logout();
+    goto('/login');
+  }
+
+  function resetIdleTimer() {
+    if (!browser) return;
+    clearTimeout(idleTimer);
+    const minutes = $settings.security.sessionTimeoutMinutes;
+    if (!minutes || !authorized) return;
+    idleTimer = setTimeout(endSession, minutes * 60_000);
+  }
+
+  // Re-arm whenever the configured timeout changes, not just on activity.
+  $: $settings.security.sessionTimeoutMinutes, authorized, resetIdleTimer();
+
+  onMount(resetIdleTimer);
+  onDestroy(() => clearTimeout(idleTimer));
 
   const navItems = [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/admin' },
@@ -24,6 +63,17 @@
   ];
 </script>
 
+<svelte:window
+  on:pointerdown={resetIdleTimer}
+  on:keydown={resetIdleTimer}
+  on:wheel={resetIdleTimer}
+/>
+
+{#if !authorized}
+  <div class="bg-background text-muted-foreground flex min-h-screen items-center justify-center text-sm">
+    Checking access…
+  </div>
+{:else}
 <div class="bg-background flex min-h-screen">
   <!-- Mobile backdrop -->
   {#if mobileOpen}
@@ -80,7 +130,10 @@
         <LayoutDashboard class={`h-4.5 w-4.5 shrink-0 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} />
         {#if !isCollapsed}<span class="whitespace-nowrap">Collapse</span>{/if}
       </button>
-      <button class="hover:bg-sidebar-accent/70 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 font-medium text-red-400 transition-colors">
+      <button
+        class="hover:bg-sidebar-accent/70 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 font-medium text-red-400 transition-colors"
+        on:click={endSession}
+      >
         <LogOut class="h-4.5 w-4.5 shrink-0" />
         {#if !isCollapsed}<span class="whitespace-nowrap">Logout</span>{/if}
       </button>
@@ -132,6 +185,7 @@
     </div>
   </main>
 </div>
+{/if}
 
 <style>
   .page-stack {

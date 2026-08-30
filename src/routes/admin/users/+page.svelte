@@ -3,6 +3,10 @@
 	import { Button } from '$lib/components/ui/button';
 	import { StatusBadge } from '$lib/components/ui/status-badge';
 	import { ConfirmDialog } from '$lib/components/ui/confirm-dialog';
+	import { departmentNames } from '$lib/departments/store';
+	import { settings } from '$lib/settings/store';
+	import { ROLES, type Role } from '$lib/settings/types';
+	import { logActivity } from '$lib/activity/store';
 
 	interface User {
 		id: number;
@@ -10,6 +14,7 @@
 		email: string;
 		password: string;
 		department: string;
+		role: Role;
 		status: 'Active' | 'Inactive';
 		createdAt: string;
 	}
@@ -22,6 +27,7 @@
 			email: 'jane@company.com',
 			password: 'test123',
 			department: 'HR',
+			role: 'editor',
 			status: 'Active',
 			createdAt: '2024-12-01'
 		},
@@ -31,6 +37,7 @@
 			email: 'mark@company.com',
 			password: 'test123',
 			department: 'IT',
+			role: 'admin',
 			status: 'Active',
 			createdAt: '2024-12-05'
 		},
@@ -40,6 +47,7 @@
 			email: 'paul@company.com',
 			password: 'test123',
 			department: 'Finance',
+			role: 'viewer',
 			status: 'Inactive',
 			createdAt: '2024-12-10'
 		}
@@ -59,13 +67,16 @@
 	let formEmail = '';
 	let formPassword = '';
 	let formDept = '';
+	let formRole: Role = 'viewer';
 	let formStatus: 'Active' | 'Inactive' = 'Active';
 
 	function openCreate() {
 		formName = '';
 		formEmail = '';
 		formPassword = '';
-		formDept = '';
+		// New users land in the organization's default department from Settings.
+		formDept = $settings.general.defaultDepartment;
+		formRole = 'viewer';
 		formStatus = 'Active';
 		showCreate = true;
 	}
@@ -78,11 +89,13 @@
 				name: formName,
 				email: formEmail,
 				department: formDept,
+				role: formRole,
 				password: formPassword,
 				status: formStatus,
 				createdAt: new Date().toISOString().split('T')[0]
 			}
 		];
+		logActivity('created', { target: formName, details: `User created as ${formRole}` });
 		showCreate = false;
 	}
 
@@ -92,6 +105,7 @@
 		formEmail = user.email;
 		formPassword = user.password;
 		formDept = user.department;
+		formRole = user.role;
 		formStatus = user.status;
 	}
 
@@ -105,10 +119,12 @@
 						email: formEmail,
 						password: formPassword,
 						department: formDept,
+						role: formRole,
 						status: formStatus
 					}
 				: u
 		);
+		logActivity('edited', { target: formName, details: 'User updated' });
 		showEdit = null;
 	}
 
@@ -123,7 +139,10 @@
 	}
 
 	function confirmRemoveUser() {
-		if (userPendingDelete) removeUser(userPendingDelete.id);
+		if (userPendingDelete) {
+			logActivity('deleted', { target: userPendingDelete.name, details: 'User deleted' });
+			removeUser(userPendingDelete.id);
+		}
 		userPendingDelete = null;
 	}
 
@@ -151,10 +170,9 @@
 			<label for="user-filter-department" class="text-muted-foreground shrink-0 text-xs font-medium">Department</label>
 			<select id="user-filter-department" bind:value={filterDept} class="border-border/60 rounded-lg border bg-transparent px-2 py-2 text-sm shadow-xs">
 				<option>All</option>
-				<option>HR</option>
-				<option>IT</option>
-				<option>Finance</option>
-				<option>Legal</option>
+				{#each $departmentNames as name (name)}
+					<option>{name}</option>
+				{/each}
 			</select>
 		</div>
 
@@ -207,6 +225,7 @@
 					<th class="text-muted-foreground px-4 py-3 text-left text-xs font-medium tracking-wide uppercase">Name</th>
 					<th class="text-muted-foreground px-4 py-3 text-xs font-medium tracking-wide uppercase">Email</th>
 					<th class="text-muted-foreground px-4 py-3 text-center text-xs font-medium tracking-wide uppercase">Department</th>
+					<th class="text-muted-foreground px-4 py-3 text-center text-xs font-medium tracking-wide uppercase">Role</th>
 					<th class="text-muted-foreground px-4 py-3 text-center text-xs font-medium tracking-wide uppercase">Status</th>
 					<th class="text-muted-foreground px-4 py-3 text-center text-xs font-medium tracking-wide uppercase">Created</th>
 					<th class="text-muted-foreground px-4 py-3 text-right text-xs font-medium tracking-wide uppercase">Actions</th>
@@ -218,6 +237,11 @@
 						<td class="px-4 py-3.5 font-medium">{user.name}</td>
 						<td class="text-muted-foreground px-4 py-3.5 text-center text-sm">{user.email}</td>
 						<td class="px-4 py-3.5 text-center">{user.department}</td>
+						<td class="px-4 py-3.5 text-center">
+							<span class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium capitalize">
+								{user.role}
+							</span>
+						</td>
 						<td class="px-4 py-3.5 text-center"><StatusBadge status={user.status} /></td>
 						<td class="px-4 py-3.5 text-center">{user.createdAt}</td>
 						<td class="flex justify-end gap-1 px-4 py-3.5">
@@ -257,7 +281,12 @@
 					<Building2 class="h-3.5 w-3.5" />
 					{user.department}
 				</p>
-				<p class="mt-3 text-sm"><StatusBadge status={user.status} /></p>
+				<p class="mt-3 flex items-center gap-2 text-sm">
+					<StatusBadge status={user.status} />
+					<span class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium capitalize">
+						{user.role}
+					</span>
+				</p>
 			</div>
 		{/each}
 	</div>
@@ -284,11 +313,18 @@
 					class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
 				/>
 				<select bind:value={formDept} class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2">
-					<option value="" disabled selected>Select department</option>
-					<option>HR</option>
-					<option>IT</option>
-					<option>Finance</option>
-					<option>Legal</option>
+					<option value="" disabled>Select department</option>
+					{#each $departmentNames as name (name)}
+						<option>{name}</option>
+					{/each}
+				</select>
+
+				<select bind:value={formRole} class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2">
+					{#each ROLES as role (role)}
+						<option value={role}>
+							{role.charAt(0).toUpperCase() + role.slice(1)} — {$settings.roles[role].join(', ') || 'no permissions'}
+						</option>
+					{/each}
 				</select>
 
 				<input
