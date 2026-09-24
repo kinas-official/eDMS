@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Building2, Users, Plus, Pencil, Trash2, Table, Grid } from 'lucide-svelte';
+	import { Building2, Users, Plus, Pencil, Trash2, Table, Grid } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { ConfirmDialog } from '$lib/components/ui/confirm-dialog';
 	import {
@@ -203,7 +203,7 @@
 					placeholder="Description"
 					bind:value={formDescription}
 					class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
-				/>
+				></textarea>
 			</div>
 
 			<div class="mt-4 flex justify-end gap-2">

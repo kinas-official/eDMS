@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { UploadCloud } from 'lucide-svelte';
+  import { UploadCloud } from '@lucide/svelte';
   import { fileExtension, parseAllowedTypes } from '$lib/settings/types';
 
   /** Free-text extension list from Settings, e.g. ".pdf, .docx". Empty = allow anything. */
@@ -57,9 +57,19 @@
   function handleClick() {
     inputEl.click();
   }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      handleClick();
+    }
+  }
 </script>
 
 <div
+  role="button"
+  tabindex="0"
+  aria-label="Upload documents"
   class={`flex h-32 cursor-pointer flex-col items-center justify-center rounded-xl border-2
          border-dashed text-sm transition ${
            isDragging
@@ -67,6 +77,7 @@
              : 'border-primary/50 text-muted-foreground hover:border-primary'
          }`}
   on:click={handleClick}
+  on:keydown={handleKeydown}
   on:drop={handleDrop}
   on:dragover={handleDragOver}
   on:dragenter={() => (isDragging = true)}

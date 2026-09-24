@@ -58,7 +58,7 @@ const THEMES: Record<Mode, ChartTheme> = {
 	}
 };
 
-export const FONT_FAMILY = "'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif";
+export const FONT_FAMILY = "'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif";
 
 /**
  * The `dark` class on `<html>` is the single source of truth — `$lib/theme`

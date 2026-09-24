@@ -1,8 +1,28 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { FileText, Table, Grid, Eye, Settings, Trash2, X } from 'lucide-svelte';
-	import mammoth from 'mammoth';
+	import {
+		FileText,
+		Table,
+		Grid,
+		Eye,
+		Settings,
+		Trash2,
+		X,
+		Upload,
+		Pencil,
+		CircleCheck,
+		CircleX,
+		RotateCcw,
+		Plus,
+		Archive,
+		History,
+		ArrowRight,
+		ChevronDown,
+		Download,
+		FileX
+	} from '@lucide/svelte';
 	import UploadDropzone from '$lib/components/site/UploadDropzone.svelte';
+	import DocumentPreview from '$lib/components/site/DocumentPreview.svelte';
+	import { docxToText, formatFileSize, previewKind } from '$lib/documents/preview';
 	import { diffWords } from 'diff';
 	import { Button } from '$lib/components/ui/button';
 	import { StatusBadge } from '$lib/components/ui/status-badge';
@@ -12,8 +32,10 @@
 	import { toAcceptAttribute } from '$lib/settings/types';
 	import { logActivity as recordActivity } from '$lib/activity/store';
 	import type { ActivityAction, ActivityLog } from '$lib/activity/types';
+	import { currentUser } from '$lib/auth/store';
+	import { canWrite } from '$lib/permissions/rbac';
 
-	let role = 'admin';
+	$: role = $currentUser?.role ?? 'viewer';
 
 	/** Files the dropzone turned away, shown until the next successful upload. */
 	let uploadErrors: string[] = [];
@@ -75,10 +97,8 @@
 		return matchesSearch && matchesDepartment && matchesStatus;
 	});
 
-	let files: File[] = [];
 	let showModal = false;
 	let currentFile: File | null = null;
-	let filePreviewUrl: string | null = null;
 
 	// Form fields for modal
 	let title = '';
@@ -89,11 +109,6 @@
 	function handleSelect(event: CustomEvent<File[]>) {
 		uploadErrors = [];
 		currentFile = event.detail[0];
-		files.push(currentFile);
-
-		// Create preview URL
-		filePreviewUrl = URL.createObjectURL(currentFile);
-
 		showModal = true;
 
 		// Pre-fill from the filename and the organization defaults in Settings.
@@ -111,99 +126,72 @@
 		return $settings.documents.requireApproval ? 'Draft' : 'Approved';
 	}
 
-	let docxHtml: string | null = null;
-
-	async function generateDocxPreview(file: File) {
-		if (!file) return;
-
-		if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-			const arrayBuffer = await file.arrayBuffer();
-
-			const result = await mammoth.convertToHtml(
-				{ arrayBuffer },
-				{
-					styleMap: [
-						// Headings
-						"p[style-name='Title'] => h1:fresh",
-						"p[style-name='Heading 1'] => h2:fresh",
-						"p[style-name='Heading 2'] => h3:fresh",
-						// Text formatting
-						'b => strong',
-						'i => em',
-						'u => u',
-						"p[style-name='List Paragraph'] => ul > li:fresh",
-						// Tables
-						'table => table.fancy-table:fresh',
-						'tr => tr:fresh',
-						'tc => td:fresh'
-					]
-				}
-			);
-
-			docxHtml = result.value; // HTML content with headers, tables, bold, italic, lists, images
-		} else {
-			docxHtml = null;
-		}
+	function cancelUpload() {
+		showModal = false;
+		currentFile = null;
 	}
 
-	// Whenever a new file is selected
-	$: if (currentFile) {
-		generateDocxPreview(currentFile);
+	// ---- Preview --------------------------------------------------------------
+	// Kept separate from `activeModal` so it can open on top of Manage (from a
+	// Change History card) and drop back to it when closed.
+
+	let previewDocId: string | null = null;
+	let previewVersionId: string | null = null;
+
+	$: previewDoc = previewDocId ? (documents.find((d) => d.id === previewDocId) ?? null) : null;
+	$: allPreviewVersions = previewDoc?.versions ?? [];
+	$: previewVersions = allPreviewVersions.filter((v) => v.file);
+	$: previewVersion =
+		previewVersions.find((v) => v.id === previewVersionId) ?? previewVersions.at(-1) ?? null;
+
+	function openPreview(doc: DocumentItem, versionId: string | null = null) {
+		previewDocId = doc.id;
+		previewVersionId = versionId;
 	}
 
-	async function viewDocument(doc: DocumentItem) {
-		activeDoc = doc;
-		activeModal = 'view';
-
-		// Reset
-		viewPreviewUrl = null;
-		viewDocxHtml = null;
-
-		// TEMP: since no backend yet, reuse upload preview logic
-		if (currentFile) {
-			if (currentFile.type === 'application/pdf') {
-				viewPreviewUrl = URL.createObjectURL(currentFile);
-			}
-
-			if (
-				currentFile.type ===
-				'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-			) {
-				const arrayBuffer = await currentFile.arrayBuffer();
-				const result = await mammoth.convertToHtml(
-					{ arrayBuffer },
-					{
-						styleMap: [
-							"p[style-name='Title'] => h1:fresh",
-							"p[style-name='Heading 1'] => h2:fresh",
-							"p[style-name='Heading 2'] => h3:fresh",
-							'table => table.fancy-table:fresh',
-							'tr => tr:fresh',
-							'tc => td:fresh'
-						]
-					}
-				);
-
-				viewDocxHtml = result.value;
-			}
-		}
+	function closePreview() {
+		previewDocId = null;
+		previewVersionId = null;
 	}
 
-	function manageDocument(doc: DocumentItem, role = 'admin') {
+	function versionLabel(version: DocumentVersion) {
+		return `v${allPreviewVersions.findIndex((v) => v.id === version.id) + 1}`;
+	}
+
+	async function downloadVersion(version: DocumentVersion) {
+		if (!version.file) return;
+		const { saveAs } = await import('file-saver');
+		saveAs(version.file, version.fileName ?? version.file.name);
+	}
+
+	function handleWindowKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape' && previewDocId) closePreview();
+	}
+
+	/**
+	 * The Manage form edits these copies, never `activeDoc` itself, so typing
+	 * doesn't change the list and Cancel really discards.
+	 */
+	let editTitle = '';
+	let editDepartment = '';
+	let editStatus: DocumentStatus = 'Draft';
+
+	function manageDocument(doc: DocumentItem) {
 		activeDoc = doc;
 		activeModal = 'manage';
+		activeTab = 'edit';
+		editTitle = doc.title;
+		editDepartment = doc.department;
+		editStatus = doc.status;
+		updatedFile = null;
+		updatedFileText = undefined;
 	}
 
 	function closeModal() {
 		activeModal = null;
 		activeDoc = null;
-
-		if (viewPreviewUrl) {
-			URL.revokeObjectURL(viewPreviewUrl);
-			viewPreviewUrl = null;
-		}
-
-		viewDocxHtml = null;
+		updatedFile = null;
+		updatedFileText = undefined;
 	}
 
 	let docPendingDelete: DocumentItem | null = null;
@@ -226,11 +214,11 @@
 	}
 
 	function restoreDocument(doc: DocumentItem) {
-		doc.deletedAt = null;
+		documents = documents.map((d) => (d.id === doc.id ? { ...d, deletedAt: null } : d));
 		logActivity(doc, 'restored');
 	}
 
-	type ActiveModal = 'view' | 'manage' | null;
+	type ActiveModal = 'manage' | null;
 
 	let activeModal: ActiveModal = null;
 	let activeDoc: DocumentItem | null = null;
@@ -244,7 +232,8 @@
 		editor: string;
 		snapshot: Partial<DocumentItem>;
 		file?: File; // optional, store actual file
-		fileText?: string; // text extracted from DOCX/PDF for diffing
+		fileName?: string; // set when this version uploaded a file
+		fileText?: string; // text extracted from DOCX/plain text for diffing
 	};
 
 	// `ActivityLog` now comes from $lib/activity/types — the shared audit log.
@@ -260,30 +249,32 @@
 		activity?: ActivityLog[];
 	};
 
-	const canEdit = (doc: DocumentItem, role = 'admin') => {
+	// Reactive so the template re-evaluates them when `role` changes.
+	$: canEdit = (doc: DocumentItem) => {
 		if (doc.deletedAt) return false;
 		if (role === 'viewer') return false;
 		if (doc.status === 'Approved') return false;
 		return true;
 	};
 
-	const canDelete = (doc: DocumentItem) => {
+	$: canDelete = (doc: DocumentItem) => {
 		if (role !== 'admin') return false;
 		if (doc.deletedAt) return false;
 		return true;
 	};
 
-	// Extract text from file (DOCX)
+	/**
+	 * Text used for the content diff in Change History. PDFs, images etc. return
+	 * null: read as text they'd come through as binary noise.
+	 */
 	async function extractFileText(file: File): Promise<string | null> {
-		if (!file) return null;
-
-		if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-			const arrayBuffer = await file.arrayBuffer();
-			const result = await mammoth.extractRawText({ arrayBuffer });
-			return result.value; // raw text from DOCX
+		const kind = previewKind(file);
+		try {
+			if (kind === 'docx') return await docxToText(file);
+			if (kind === 'text') return await file.text();
+		} catch {
+			// Unreadable file: still accept the upload, just without a content diff.
 		}
-
-		// For other file types, you can return null or empty string
 		return null;
 	}
 
@@ -298,12 +289,14 @@
 		const snapshot: DocumentVersion & { fileText?: string } = {
 			id: crypto.randomUUID(),
 			timestamp: new Date().toISOString(),
-			editor: 'Admin',
+			editor: actor,
 			snapshot: {
 				title: doc.title,
 				department: doc.department,
 				status: doc.status
 			},
+			file,
+			fileName: file?.name,
 			fileText: fileText ?? undefined // convert null -> undefined
 		};
 
@@ -316,24 +309,12 @@
 		if (!input.files?.length) return;
 
 		updatedFile = input.files[0];
-
-		// Extract text for diffing
-		if (
-			updatedFile.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-		) {
-			const buffer = await updatedFile.arrayBuffer();
-			const result = await mammoth.extractRawText({ arrayBuffer: buffer });
-			updatedFileText = result.value;
-		} else {
-			updatedFileText = await updatedFile.text().catch(() => undefined);
-		}
+		updatedFileText = (await extractFileText(updatedFile)) ?? undefined;
 	}
 
 	// Submit form for new document
 	async function submitForm() {
 		if (!currentFile) return;
-
-		const fileText = await extractFileText(currentFile);
 
 		const newDoc: DocumentItem = {
 			id: `${department?.substring(0, 2).toUpperCase()}-${Date.now()}`,
@@ -349,81 +330,15 @@
 
 		// Add to documents list
 		documents = [newDoc, ...documents];
+		logActivity(newDoc, 'created', `Uploaded ${currentFile.name}`);
 
 		// Reset modal
 		showModal = false;
-		if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
-		filePreviewUrl = null;
 		currentFile = null;
 		title = '';
 		department = '';
 		status = initialStatus();
 		description = '';
-	}
-
-	function saveChanges() {
-		if (!activeDoc) return;
-
-		const snapshot: DocumentVersion = {
-			id: crypto.randomUUID(),
-			timestamp: new Date().toISOString(),
-			editor: 'Admin',
-			snapshot: {
-				title: activeDoc.title,
-				department: activeDoc.department,
-				status: activeDoc.status
-			}
-		};
-
-		documents = documents.map((doc) => {
-			if (doc.id !== activeDoc!.id) return doc;
-
-			return {
-				...doc,
-				title: activeDoc!.title,
-				department: activeDoc!.department,
-				status: activeDoc!.status,
-				versions: [...(doc.versions ?? []), snapshot],
-				activity: [
-					...(doc.activity ?? []),
-					{
-						id: crypto.randomUUID(),
-						action: 'edited',
-						actor: 'Admin',
-						timestamp: new Date().toISOString(),
-						details: 'Metadata updated'
-					}
-				]
-			};
-		});
-
-		// Status-based activity
-		if (activeDoc.status === 'Approved') {
-			logActivity(activeDoc, 'approved');
-		}
-		if (activeDoc.status === 'Rejected') {
-			logActivity(activeDoc, 'rejected');
-		}
-
-		const original = documents.find((d) => d.id === activeDoc?.id);
-		if (
-			original &&
-			original.title === activeDoc.title &&
-			original.department === activeDoc.department &&
-			original.status === activeDoc.status
-		) {
-			closeModal();
-			return;
-		}
-	}
-
-	function diffFields(prev: Partial<DocumentItem>, curr: Partial<DocumentItem>) {
-		return Object.entries(curr).map(([key, value]) => ({
-			field: key,
-			before: prev[key as keyof DocumentItem],
-			after: value,
-			changed: prev[key as keyof DocumentItem] !== value
-		}));
 	}
 
 	/**
@@ -433,18 +348,22 @@
 	 */
 	function logActivity(doc: DocumentItem, action: ActivityAction, details?: string) {
 		const entry = recordActivity(action, {
+			actor,
 			details,
 			target: doc.title,
 			targetId: doc.id
 		});
 
+		// Look the document up by id rather than mutating `doc`: callers often hold
+		// a copy that has already been replaced in `documents`.
 		if ($settings.documents.enableVersioning) {
-			doc.activity = [...(doc.activity ?? []), entry];
+			documents = documents.map((d) =>
+				d.id === doc.id ? { ...d, activity: [...(d.activity ?? []), entry] } : d
+			);
 		}
 	}
 
-	let viewPreviewUrl: string | null = null;
-	let viewDocxHtml: string | null = null;
+	$: actor = $currentUser?.username ?? 'Unknown';
 
 	/**
 	 * Returns HTML showing GitHub-style diff between two strings
@@ -455,77 +374,149 @@
 
 		return diffs
 			.map((part) => {
+				// The text is user-supplied (titles, file contents) and goes into {@html}.
+				const value = escapeHtml(part.value);
 				if (part.added) {
-					return `<span style="background-color:#d4f8d4;color:#0a0;">${part.value}</span>`;
+					return `<span class="diff-add">${value}</span>`;
 				} else if (part.removed) {
-					return `<span style="background-color:#f8d4d4;color:#a00;text-decoration:line-through;">${part.value}</span>`;
+					return `<span class="diff-remove">${value}</span>`;
 				} else {
-					return part.value;
+					return value;
 				}
 			})
 			.join('');
 	}
 
+	function escapeHtml(text: string) {
+		return text
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#39;');
+	}
+
 	let updatedFile: File | null = null;
 	let updatedFileText: string | undefined;
+
+	const FIELD_LABELS = { title: 'Title', department: 'Department', status: 'Status' } as const;
+	type TrackedField = keyof typeof FIELD_LABELS;
+	const TRACKED_FIELDS = Object.keys(FIELD_LABELS) as TrackedField[];
+
+	function formatTime(iso: string) {
+		return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+	}
+
+	/** The tracked fields that differ between two versions, in display order. */
+	function versionChanges(prev: DocumentVersion, curr: DocumentVersion) {
+		return TRACKED_FIELDS.filter(
+			(field) => field in curr.snapshot && prev.snapshot[field] !== curr.snapshot[field]
+		).map((field) => ({
+			field,
+			before: String(prev.snapshot[field] ?? ''),
+			after: String(curr.snapshot[field] ?? '')
+		}));
+	}
+
+	const ACTION_STYLES: Record<ActivityAction, { icon: typeof Pencil; class: string }> = {
+		created: { icon: Plus, class: 'bg-blue-500/15 text-blue-600 dark:text-blue-300' },
+		edited: { icon: Pencil, class: 'bg-muted text-muted-foreground' },
+		approved: { icon: CircleCheck, class: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300' },
+		rejected: { icon: CircleX, class: 'bg-red-500/15 text-red-600 dark:text-red-300' },
+		deleted: { icon: Trash2, class: 'bg-red-500/15 text-red-600 dark:text-red-300' },
+		restored: { icon: RotateCcw, class: 'bg-blue-500/15 text-blue-600 dark:text-blue-300' },
+		archived: { icon: Archive, class: 'bg-amber-500/15 text-amber-600 dark:text-amber-300' },
+		purged: { icon: Trash2, class: 'bg-red-500/15 text-red-600 dark:text-red-300' }
+	};
+
+	let replaceFileInput: HTMLInputElement;
+
+	function clearReplacementFile() {
+		updatedFile = null;
+		updatedFileText = undefined;
+		if (replaceFileInput) replaceFileInput.value = '';
+	}
+
 
 	function saveDocumentChanges() {
 		if (!activeDoc) return;
 
-		const hasMetadataChange =
-			activeDoc.title !== title ||
-			activeDoc.department !== department ||
-			activeDoc.status !== status;
+		const original = activeDoc;
+		const next = { title: editTitle.trim(), department: editDepartment, status: editStatus };
+		if (!next.title) return;
 
-		const hasFileChange = !!updatedFile;
+		const changed = (Object.keys(next) as (keyof typeof next)[]).filter(
+			(field) => original[field] !== next[field]
+		);
 
-		if (!hasMetadataChange && !hasFileChange) {
-			showModal = false;
+		if (!changed.length && !updatedFile) {
+			closeModal();
 			return;
 		}
 
-		// Apply metadata updates
-		activeDoc.title = title;
-		activeDoc.department = department;
-		activeDoc.status = status;
+		const now = new Date().toISOString();
+		let versions = original.versions ?? [];
 
-		// Create new version
-		const newVersion: DocumentVersion & { fileText?: string } = {
-			id: crypto.randomUUID(),
-			timestamp: new Date().toISOString(),
-			editor: 'Admin',
-			snapshot: {
-				title,
-				department,
-				status
-			},
-			fileText: updatedFileText
-		};
+		if ($settings.documents.enableVersioning) {
+			// Seeded documents (and ones created while versioning was off) have no
+			// history yet. Record where they started so this edit shows as a diff
+			// instead of becoming the "initial version".
+			if (!versions.length) {
+				versions = [
+					{
+						id: crypto.randomUUID(),
+						timestamp: original.createdAt ? new Date(original.createdAt).toISOString() : now,
+						editor: 'System',
+						snapshot: {
+							title: original.title,
+							department: original.department,
+							status: original.status
+						}
+					}
+				];
+			}
 
-		activeDoc.versions = [...(activeDoc.versions ?? []), newVersion];
+			versions = [
+				...versions,
+				{
+					id: crypto.randomUUID(),
+					timestamp: now,
+					editor: actor,
+					snapshot: next,
+					file: updatedFile ?? undefined,
+					fileName: updatedFile?.name,
+					fileText: updatedFileText
+				}
+			];
+		}
 
-		// Optional: activity log
-		logActivity(
-			activeDoc,
-			'edited',
-			hasFileChange ? 'Updated document file' : 'Updated document metadata'
-		);
+		documents = documents.map((d) => (d.id === original.id ? { ...d, ...next, versions } : d));
 
-		// Reset modal state
-		updatedFile = null;
-		updatedFileText = undefined;
-		showModal = false;
+		const details = [
+			...changed.map((field) => `${FIELD_LABELS[field]}: ${original[field]} → ${next[field]}`),
+			...(updatedFile ? [`File replaced with ${updatedFile.name}`] : [])
+		].join('; ');
+
+		logActivity(original, 'edited', details);
+
+		if (changed.includes('status') && (next.status === 'Approved' || next.status === 'Rejected')) {
+			logActivity(original, next.status === 'Approved' ? 'approved' : 'rejected');
+		}
+
+		closeModal();
 	}
 </script>
 
 <div class="space-y-6">
 	<!-- Drag-and-Drop Upload -->
-	<UploadDropzone
-		on:select={handleSelect}
-		on:reject={handleReject}
-		allowedFileTypes={$settings.documents.allowedFileTypes}
-		maxSizeMb={$settings.documents.maxUploadSizeMb}
-	/>
+	{#if canWrite($currentUser)}
+		<UploadDropzone
+			on:select={handleSelect}
+			on:reject={handleReject}
+			allowedFileTypes={$settings.documents.allowedFileTypes}
+			maxSizeMb={$settings.documents.maxUploadSizeMb}
+		/>
+	{/if}
 
 	{#if uploadErrors.length}
 		<div class="border-destructive/30 bg-destructive/5 text-destructive rounded-lg border p-3 text-sm">
@@ -612,7 +603,9 @@
 						{#each filteredDocuments as doc}
 							<tr class="hover:bg-muted/50 border-border/60 border-b transition-colors">
 								<td class="text-muted-foreground px-4 py-3.5">{doc.id}</td>
-								<td class="px-4 py-3.5 font-medium">{doc.title}</td>
+								<td class="px-4 py-3.5 font-medium">
+									<button class="hover:underline" on:click={() => openPreview(doc)}>{doc.title}</button>
+								</td>
 								<td class="px-4 py-3.5">{doc.department}</td>
 								<td class="px-4 py-3.5"><StatusBadge status={doc.status} /></td>
 								<td class="text-muted-foreground px-4 py-3.5">{doc.createdAt}</td>
@@ -621,7 +614,7 @@
 										<!-- View -->
 										<button
 											class="hover:bg-muted hover:border-foreground/20 border-border/60 flex items-center rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-all hover:-translate-y-px hover:shadow-sm"
-											on:click={() => viewDocument(doc)}
+											on:click={() => openPreview(doc)}
 										>
 											<Eye class="mr-1 h-3.5 w-3.5" /> View
 										</button>
@@ -655,14 +648,24 @@
 		{#if viewMode === 'cards'}
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
 				{#each filteredDocuments as doc}
-					<div class="bg-card border-border/60 rounded-xl border p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
-						<h3 class="font-semibold tracking-tight">{doc.title}</h3>
+					<div class="bg-card border-border/60 flex flex-col rounded-xl border p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+						<button class="text-left font-semibold tracking-tight hover:underline" on:click={() => openPreview(doc)}>
+							{doc.title}
+						</button>
 						<p class="text-muted-foreground mt-0.5 text-sm">{doc.id}</p>
 						<div class="mt-4 flex items-center justify-between text-sm">
 							<span class="text-muted-foreground">{doc.department}</span>
 							<StatusBadge status={doc.status} />
 						</div>
 						<p class="text-muted-foreground mt-3 text-xs">{doc.createdAt}</p>
+						<div class="border-border/60 mt-4 flex gap-2 border-t pt-4">
+							<Button variant="outline" size="sm" class="flex-1" onclick={() => openPreview(doc)}>
+								<Eye class="h-3.5 w-3.5" /> View
+							</Button>
+							<Button variant="outline" size="sm" class="flex-1" onclick={() => manageDocument(doc)}>
+								<Settings class="h-3.5 w-3.5" /> Manage
+							</Button>
+						</div>
 					</div>
 				{/each}
 			</div>
@@ -684,29 +687,16 @@
 			<h2 class="mb-4 text-lg font-semibold">Document Details</h2>
 
 			<!-- Modal Preview -->
-			{#if filePreviewUrl || docxHtml}
-				{#if currentFile}
-					<div class="mb-4 max-h-[600px] overflow-auto rounded-xl border-border/60 border bg-muted/50 p-2">
-						{#if currentFile.type.startsWith('image/')}
-							<img src={filePreviewUrl} alt="Preview" class="mx-auto w-full object-contain" />
-						{:else if currentFile.type === 'application/pdf'}
-							<iframe src={filePreviewUrl} class="h-[600px] w-full border" />
-						{:else if currentFile.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
-							<div class="docx-preview">
-								{@html docxHtml}
-							</div>
-						{:else}
-							<p class="text-muted-foreground text-sm">Preview not available for this file type.</p>
-						{/if}
-					</div>
-				{/if}
-			{/if}
+			<div class="border-border/60 bg-muted/40 mb-4 h-[50vh] overflow-auto rounded-xl border p-3">
+				<DocumentPreview file={currentFile} class="h-full" />
+			</div>
 
 			<!-- Metadata Inputs -->
 			<div class="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
 				<div>
-					<label class="mb-1.5 block text-sm font-medium">Title</label>
+					<label class="mb-1.5 block text-sm font-medium" for="new-doc-title">Title</label>
 					<input
+						id="new-doc-title"
 						type="text"
 						bind:value={title}
 						class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
@@ -746,8 +736,9 @@
 				</div>
 
 				<div>
-					<label class="mb-1.5 block text-sm font-medium">Description</label>
+					<label class="mb-1.5 block text-sm font-medium" for="new-doc-description">Description</label>
 					<input
+						id="new-doc-description"
 						type="text"
 						bind:value={description}
 						class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
@@ -758,35 +749,8 @@
 
 			<!-- Actions -->
 			<div class="flex justify-end gap-2">
-				<Button variant="outline" onclick={() => (showModal = false)}>Cancel</Button>
+				<Button variant="outline" onclick={cancelUpload}>Cancel</Button>
 				<Button onclick={submitForm}>Save</Button>
-			</div>
-		</div>
-	</div>
-{/if}
-
-{#if activeModal === 'view' && activeDoc}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-		<div class="max-h-[90vh] w-full max-w-[1200px] overflow-auto bg-card border-border/60 rounded-2xl border p-6 shadow-2xl">
-			<div class="mb-4 flex items-center justify-between">
-				<h2 class="text-lg font-semibold">{activeDoc.title}</h2>
-				<button class="text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg p-1.5 text-sm transition-colors" on:click={closeModal} aria-label="Close">
-					<X class="h-4 w-4" />
-				</button>
-			</div>
-
-			<!-- Document preview -->
-			<div class="h-[70vh] overflow-auto rounded-xl border-border/60 border bg-muted/50 p-4">
-				<!-- reuse your preview logic here -->
-				{#if viewPreviewUrl}
-					<iframe src={viewPreviewUrl} class="h-full w-full rounded-md border" />
-				{:else if viewDocxHtml}
-					<div class="docx-preview">
-						{@html viewDocxHtml}
-					</div>
-				{:else}
-					<p class="text-muted-foreground text-sm">No preview available.</p>
-				{/if}
 			</div>
 		</div>
 	</div>
@@ -846,35 +810,41 @@
 				{#if activeTab === 'edit'}
 					<div class="space-y-4">
 						<div>
-							<label class="mb-1.5 block text-sm font-medium">Title</label>
+							<label class="mb-1.5 block text-sm font-medium" for="manage-doc-title">Title</label>
 							<input
+								id="manage-doc-title"
 								class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
-								bind:value={activeDoc.title}
+								bind:value={editTitle}
 								disabled={!canEdit(activeDoc)}
                 required
 							/>
 						</div>
 
 						<div>
-							<label class="mb-1.5 block text-sm font-medium">Department</label>
+							<label class="mb-1.5 block text-sm font-medium" for="manage-doc-department">Department</label>
 							<select
+								id="manage-doc-department"
 								class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
-								bind:value={activeDoc.department}
+								bind:value={editDepartment}
 								disabled={!canEdit(activeDoc)}
                 required
 							>
-								<option>HR</option>
-								<option>Finance</option>
-								<option>IT</option>
-								<option>Legal</option>
+								{#each $departmentNames as name (name)}
+									<option>{name}</option>
+								{/each}
+								{#if !$departmentNames.includes(activeDoc.department)}
+									<!-- Keep a department that has since been deleted selectable. -->
+									<option>{activeDoc.department}</option>
+								{/if}
 							</select>
 						</div>
 
 						<div>
-							<label class="mb-1.5 block text-sm font-medium">Status</label>
+							<label class="mb-1.5 block text-sm font-medium" for="manage-doc-status">Status</label>
 							<select
+								id="manage-doc-status"
 								class="border-border/60 focus-visible:ring-ring/50 w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-shadow focus-visible:ring-2"
-								bind:value={activeDoc.status}
+								bind:value={editStatus}
 								disabled={!canEdit(activeDoc)}
                 required
 							>
@@ -888,25 +858,63 @@
 						<div>
 							{#if canEdit(activeDoc)}
 								<div class="mb-4">
-									<label class="mb-1 block text-sm font-medium" for="doc-replace-file">
-										{$settings.documents.enableVersioning
-											? 'Upload New File (creates new version)'
-											: 'Replace File'}
-									</label>
+									<p class="mb-1.5 text-sm font-medium">
+										{$settings.documents.enableVersioning ? 'Upload new file' : 'Replace file'}
+									</p>
 
-									<input
-										id="doc-replace-file"
-										type="file"
-										accept={toAcceptAttribute($settings.documents.allowedFileTypes) || undefined}
-										on:change={handleFileUpdate}
-										class="text-xs"
-									/>
+									<div class="relative">
+										<label
+											for="doc-replace-file"
+											class={`group flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed p-3 pr-12 transition-colors focus-within:ring-ring/50 focus-within:ring-2 ${
+												updatedFile
+													? 'border-primary/50 bg-primary/5'
+													: 'border-border hover:border-primary/50 hover:bg-muted/50'
+											}`}
+										>
+											<input
+												id="doc-replace-file"
+												bind:this={replaceFileInput}
+												type="file"
+												accept={toAcceptAttribute($settings.documents.allowedFileTypes) || undefined}
+												on:change={handleFileUpdate}
+												class="sr-only"
+											/>
+											<span
+												class="bg-muted text-muted-foreground group-hover:text-foreground flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors"
+											>
+												{#if updatedFile}
+													<FileText class="h-5 w-5" />
+												{:else}
+													<Upload class="h-5 w-5" />
+												{/if}
+											</span>
+											<span class="min-w-0 flex-1">
+												<span class="block truncate text-sm font-medium">
+													{updatedFile ? updatedFile.name : 'Choose a file'}
+												</span>
+												<span class="text-muted-foreground block text-xs">
+													{#if updatedFile}
+														{formatFileSize(updatedFile.size)} · click to choose a different file
+													{:else}
+														Click to browse{$settings.documents.enableVersioning
+															? ' · saving creates a new version'
+															: ''}
+													{/if}
+												</span>
+											</span>
+										</label>
 
-									{#if updatedFile}
-										<p class="text-muted-foreground mt-1 text-xs">
-											Selected: {updatedFile.name}
-										</p>
-									{/if}
+										{#if updatedFile}
+											<button
+												type="button"
+												aria-label="Remove selected file"
+												class="text-muted-foreground hover:bg-muted hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2 rounded-md p-1.5 transition-colors"
+												on:click={clearReplacementFile}
+											>
+												<X class="h-4 w-4" />
+											</button>
+										{/if}
+									</div>
 								</div>
 							{/if}
 						</div>
@@ -914,97 +922,164 @@
 				{/if}
 
 				{#if activeTab === 'history' && $settings.documents.enableVersioning}
-					<h3 class="mb-2 text-sm font-medium">Change History</h3>
-
 					{#if activeDoc.versions?.length}
-						<ul class="space-y-4 text-xs">
-							{#each activeDoc.versions as version, i}
-								{#if i === 0}
-									<!-- First version: show full snapshot -->
-									<li class="border-l-2 border-border pl-2">
-										<div class="text-sm font-medium">
-											Initial version • {new Date(version.timestamp).toLocaleString()}
-										</div>
-										<div class="text-muted-foreground mt-1">
-											{#each Object.entries(version.snapshot) as [key, value]}
-												<div>
-													<span class="font-semibold">{key}:</span>
-													<span>{@html value}</span>
-												</div>
-											{/each}
+						{@const versions = activeDoc.versions}
+						<!-- Newest first; each card is compared with the version before it. -->
+						<ol class="space-y-4">
+							{#each versions.map((version, index) => ({ version, index })).reverse() as { version, index } (version.id)}
+								{@const prev = index > 0 ? versions[index - 1] : null}
+								{@const changes = prev ? versionChanges(prev, version) : []}
+								{@const isCurrent = index === versions.length - 1}
+								<li class="relative pl-10">
+									{#if index > 0}
+										<span class="bg-border absolute top-8 -bottom-4 left-[13px] w-px" aria-hidden="true"></span>
+									{/if}
+									<span
+										class={`bg-card absolute top-0.5 left-0 flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-semibold ${
+											isCurrent ? 'border-primary text-foreground' : 'border-border text-muted-foreground'
+										}`}
+									>
+										v{index + 1}
+									</span>
 
-											<!-- NEW: Show first file content if exists -->
-											{#if version.fileText}
-												<div class="doc-diff mt-2 overflow-auto border p-2 text-xs">
-													{@html version.fileText}
-													<!-- or diffHtml('', version.fileText) if you want diff from nothing -->
-												</div>
-											{/if}
-										</div>
-									</li>
-								{:else}
-									<!-- Subsequent versions: show diffs from previous version -->
-									<li class="border-l-2 border-border pl-2">
-										<div class="text-sm font-medium">
-											Updated • {new Date(version.timestamp).toLocaleString()} • {version.editor}
-										</div>
-										<div class="mt-1">
-											<!-- Metadata diffs -->
-											{#each Object.entries(version.snapshot) as [key, value]}
-												{#if diffFields( activeDoc.versions[i - 1]?.snapshot ?? {}, { [key]: value } )[0]?.changed}
-													<div class="mb-1">
-														<span class="font-semibold">{key}:</span>
-														<span class="text-xs">
-															{@html diffHtml(
-																String(
-																	diffFields(activeDoc.versions[i - 1]?.snapshot ?? {}, {
-																		[key]: value
-																	})[0].before || ''
-																),
-																String(value || '')
-															)}
-														</span>
-													</div>
+									<div class="border-border/60 bg-card rounded-xl border p-4">
+										<div class="flex flex-wrap items-center justify-between gap-2">
+											<div class="flex items-center gap-2">
+												<span class="text-sm font-medium">
+													{prev ? `Edited by ${version.editor}` : 'Initial version'}
+												</span>
+												{#if isCurrent}
+													<StatusBadge tone="info">Current</StatusBadge>
 												{/if}
-											{/each}
-
-											<!-- NEW: Show file content diff -->
-											{#if version.fileText}
-												<div class="doc-diff mt-2 overflow-auto border p-2 text-xs">
-													{@html diffHtml(
-														activeDoc.versions[i - 1]?.fileText ?? '',
-														version.fileText
-													)}
-												</div>
-											{/if}
+											</div>
+											<div class="flex items-center gap-3">
+												<time class="text-muted-foreground text-xs" datetime={version.timestamp}>
+													{formatTime(version.timestamp)}
+												</time>
+												{#if version.file}
+													{@const doc = activeDoc}
+													<Button variant="outline" size="sm" onclick={() => openPreview(doc, version.id)}>
+														<Eye class="h-3.5 w-3.5" /> Preview
+													</Button>
+												{/if}
+											</div>
 										</div>
-									</li>
-								{/if}
+
+										{#if !prev || changes.length || version.fileName}
+											<dl class="mt-3 grid grid-cols-[6.5rem_1fr] items-center gap-x-3 gap-y-2 text-sm">
+												{#if !prev}
+													{#each TRACKED_FIELDS as field (field)}
+														<dt class="text-muted-foreground text-xs">{FIELD_LABELS[field]}</dt>
+														<dd>
+															{#if field === 'status'}
+																<StatusBadge status={String(version.snapshot.status)} />
+															{:else}
+																{version.snapshot[field]}
+															{/if}
+														</dd>
+													{/each}
+												{:else}
+													{#each changes as change (change.field)}
+														<dt class="text-muted-foreground text-xs">{FIELD_LABELS[change.field]}</dt>
+														<dd class="flex min-w-0 flex-wrap items-center gap-2">
+															{#if change.field === 'status'}
+																<StatusBadge status={change.before} class="opacity-60" />
+																<ArrowRight class="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+																<StatusBadge status={change.after} />
+															{:else}
+																<span class="diff-before">{change.before}</span>
+																<ArrowRight class="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+																<span class="diff-after">{change.after}</span>
+															{/if}
+														</dd>
+													{/each}
+												{/if}
+												{#if version.fileName}
+													<dt class="text-muted-foreground text-xs">File</dt>
+													<dd class="flex min-w-0 items-center gap-1.5">
+														<FileText class="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+														<span class="truncate">{version.fileName}</span>
+													</dd>
+												{/if}
+											</dl>
+										{:else}
+											<p class="text-muted-foreground mt-2 text-sm">No field changes.</p>
+										{/if}
+
+										{#if version.fileText}
+											<details class="group border-border/60 mt-3 rounded-lg border" open={!!prev?.fileText}>
+												<summary
+													class="hover:bg-muted/50 flex cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium select-none"
+												>
+													<FileText class="text-muted-foreground h-3.5 w-3.5" />
+													{prev?.fileText ? 'Content changes' : 'File content'}
+													<ChevronDown
+														class="text-muted-foreground ml-auto h-3.5 w-3.5 transition-transform group-open:rotate-180"
+													/>
+												</summary>
+												<div
+													class="doc-diff border-border/60 max-h-64 overflow-auto border-t px-3 py-2.5 text-xs leading-relaxed whitespace-pre-wrap"
+												>
+													{#if prev?.fileText}
+														{@html diffHtml(prev.fileText, version.fileText)}
+													{:else}
+														{version.fileText}
+													{/if}
+												</div>
+											</details>
+										{/if}
+									</div>
+								</li>
 							{/each}
-						</ul>
+						</ol>
 					{:else}
-						<p class="text-muted-foreground text-xs">No changes yet.</p>
+						<div class="text-muted-foreground flex flex-col items-center gap-2 py-10 text-sm">
+							<History class="h-8 w-8 opacity-40" />
+							No changes yet.
+						</div>
 					{/if}
 				{/if}
 
 				{#if activeTab === 'timeline'}
-					<h3 class="mb-2 text-sm font-medium">Approval Timeline</h3>
 					{#if activeDoc.activity?.length}
-						<ul class="space-y-2 text-xs">
-							{#each activeDoc.activity as log}
-								<li>
-									<div class="font-medium capitalize">{log.action}</div>
-									<div class="text-muted-foreground">
-										{new Date(log.timestamp).toLocaleString()} • {log.actor}
-									</div>
-									{#if log.details}
-										<div class="text-muted-foreground text-[10px]">{log.details}</div>
+						{@const entries = [...activeDoc.activity].reverse()}
+						<ol>
+							{#each entries as log, i (log.id)}
+								{@const style = ACTION_STYLES[log.action] ?? ACTION_STYLES.edited}
+								{@const Icon = style.icon}
+								<li class="relative flex gap-3 pb-5 last:pb-0">
+									{#if i < entries.length - 1}
+										<span class="bg-border absolute top-9 bottom-1 left-4 w-px" aria-hidden="true"></span>
 									{/if}
+									<span class={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${style.class}`}>
+										<Icon class="h-4 w-4" />
+									</span>
+									<div class="min-w-0 flex-1 pt-1">
+										<div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+											<p class="text-sm">
+												<span class="font-medium capitalize">{log.action}</span>
+												<span class="text-muted-foreground">by {log.actor}</span>
+											</p>
+											<time class="text-muted-foreground text-xs" datetime={log.timestamp}>
+												{formatTime(log.timestamp)}
+											</time>
+										</div>
+										{#if log.details}
+											<ul class="text-muted-foreground mt-1 space-y-0.5 text-xs">
+												{#each log.details.split('; ') as line}
+													<li>{line}</li>
+												{/each}
+											</ul>
+										{/if}
+									</div>
 								</li>
 							{/each}
-						</ul>
+						</ol>
 					{:else}
-						<p class="text-muted-foreground text-xs">No activity yet.</p>
+						<div class="text-muted-foreground flex flex-col items-center gap-2 py-10 text-sm">
+							<CircleCheck class="h-8 w-8 opacity-40" />
+							No activity yet.
+						</div>
 					{/if}
 				{/if}
 			</div>
@@ -1023,6 +1098,101 @@
 	</div>
 {/if}
 
+<svelte:window on:keydown={handleWindowKeydown} />
+
+{#if previewDoc}
+	<div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+		<button
+			aria-label="Close preview"
+			class="absolute inset-0 cursor-default bg-black/50"
+			on:click={closePreview}
+		></button>
+
+		<div
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="preview-title"
+			class="bg-card border-border/60 relative flex h-[90vh] w-full max-w-[1200px] flex-col overflow-hidden rounded-2xl border shadow-2xl"
+		>
+			<header class="border-border/60 flex flex-wrap items-center gap-3 border-b px-5 py-3">
+				<div class="min-w-0 flex-1">
+					<div class="flex items-center gap-2">
+						<h2 id="preview-title" class="truncate text-base font-semibold">{previewDoc.title}</h2>
+						<StatusBadge status={previewDoc.status} />
+					</div>
+					<p class="text-muted-foreground truncate text-xs">
+						{previewDoc.id} · {previewDoc.department}
+						{#if previewVersion?.file}
+							· {previewVersion.fileName ?? previewVersion.file.name} · {formatFileSize(previewVersion.file.size)}
+						{/if}
+					</p>
+				</div>
+
+				{#if previewVersions.length > 1}
+					<label class="sr-only" for="preview-version">Version</label>
+					<select
+						id="preview-version"
+						value={previewVersion?.id}
+						on:change={(e) => (previewVersionId = e.currentTarget.value)}
+						class="border-border/60 focus-visible:ring-ring/50 rounded-lg border bg-transparent py-1.5 pr-8 pl-3 text-sm shadow-xs outline-none focus-visible:ring-2"
+					>
+						{#each [...previewVersions].reverse() as version (version.id)}
+							<option value={version.id}>
+								{versionLabel(version)} · {formatTime(version.timestamp)}{version === previewVersions.at(-1)
+									? ' (latest)'
+									: ''}
+							</option>
+						{/each}
+					</select>
+				{/if}
+
+				{#if previewVersion?.file}
+					{@const version = previewVersion}
+					<Button variant="outline" size="sm" onclick={() => downloadVersion(version)}>
+						<Download class="h-4 w-4" /> Download
+					</Button>
+				{/if}
+
+				<button
+					class="text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg p-1.5 transition-colors"
+					on:click={closePreview}
+					aria-label="Close"
+				>
+					<X class="h-4 w-4" />
+				</button>
+			</header>
+
+			<div class="bg-muted/40 min-h-0 flex-1 overflow-auto p-4">
+				{#if previewVersion?.file}
+					<DocumentPreview file={previewVersion.file} class="h-full" />
+				{:else}
+					{@const doc = previewDoc}
+					<div class="text-muted-foreground flex h-full flex-col items-center justify-center gap-2 text-center text-sm">
+						<FileX class="h-10 w-10 opacity-40" />
+						<p class="text-foreground font-medium">No file attached</p>
+						<p class="max-w-sm text-xs">
+							This document has no uploaded file yet{canEdit(doc) ? '. Upload one from Manage.' : '.'}
+						</p>
+						{#if canEdit(doc)}
+							<Button
+								variant="outline"
+								size="sm"
+								class="mt-2"
+								onclick={() => {
+									closePreview();
+									manageDocument(doc);
+								}}
+							>
+								<Upload class="h-4 w-4" /> Upload a file
+							</Button>
+						{/if}
+					</div>
+				{/if}
+			</div>
+		</div>
+	</div>
+{/if}
+
 <ConfirmDialog
 	open={!!docPendingDelete}
 	title="Delete document?"
@@ -1033,46 +1203,44 @@
 />
 
 <style>
-	.docx-preview table.fancy-table {
-		width: 100%;
-		border-collapse: collapse;
-		margin-bottom: 1rem;
+	/* Change history. Translucent fills so the same colours work in both themes. */
+	.doc-diff :global(.diff-add),
+	.doc-diff :global(.diff-remove) {
+		padding: 0 2px;
+		margin: 0 1px;
+		border-radius: 3px;
 	}
 
-	.docx-preview table.fancy-table th,
-	.docx-preview table.fancy-table td {
-		border: 1px solid #ccc;
-		padding: 0.5rem;
+	.doc-diff :global(.diff-add) {
+		background: rgb(34 197 94 / 0.16);
+		color: rgb(21 128 61);
 	}
 
-	.docx-preview h1,
-	.docx-preview h2,
-	.docx-preview h3 {
-		margin: 0.5rem 0;
+	.doc-diff :global(.diff-remove) {
+		background: rgb(239 68 68 / 0.14);
+		color: rgb(185 28 28);
+		text-decoration: line-through;
 	}
 
-	.docx-preview ul,
-	.docx-preview ol {
-		margin-left: 1.2rem;
-	}
-	.docx-table {
-		width: 100%;
-		border-collapse: collapse;
-		margin-bottom: 1rem;
+	:global(.dark) .doc-diff :global(.diff-add) {
+		color: rgb(134 239 172);
 	}
 
-	.docx-table th,
-	.docx-table td {
-		border: 1px solid #ccc; /* Add visible borders */
-		padding: 0.5rem; /* Add spacing */
-		text-align: left; /* Align text */
+	:global(.dark) .doc-diff :global(.diff-remove) {
+		color: rgb(252 165 165);
 	}
 
-	.docx-table th {
-		background-color: #f3f3f3; /* Optional header background */
+	.diff-before {
+		color: var(--muted-foreground);
+		text-decoration: line-through;
+		text-decoration-color: rgb(239 68 68 / 0.6);
 	}
 
-	.docx-table tr:nth-child(even) td {
-		background-color: #fafafa; /* Optional striped rows */
+	.diff-after {
+		font-weight: 500;
+	}
+
+	summary::-webkit-details-marker {
+		display: none;
 	}
 </style>

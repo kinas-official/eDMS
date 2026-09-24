@@ -22,7 +22,7 @@
 		parseBackup,
 		type BackupPayload
 	} from '$lib/backup/backup';
-	import { Sun, Moon, Monitor, Trash2, Download, Upload, RotateCcw } from 'lucide-svelte';
+	import { Sun, Moon, Monitor, Trash2, Download, Upload, RotateCcw } from '@lucide/svelte';
 	import { fade } from 'svelte/transition';
 
 	/**
@@ -236,7 +236,7 @@
 		<section id="appearance" class="scroll-mt-4 py-6">
 			<h2 class="text-sm font-semibold tracking-tight">Appearance</h2>
 			<p class="text-muted-foreground mt-1 text-sm">
-				Choose how rDMS looks on this device. Applies immediately — it is not part of Save Changes.
+				Choose how eDMS looks on this device. Applies immediately — it is not part of Save Changes.
 			</p>
 
 			<div class="mt-4 flex gap-2">

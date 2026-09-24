@@ -9,7 +9,7 @@
 		Settings,
 		Upload,
 		TrendingUp
-	} from 'lucide-svelte';
+	} from '@lucide/svelte';
 	import { onDestroy, onMount } from 'svelte';
 
 	import QuickActions from '../../lib/components/site/QuickActions.svelte';

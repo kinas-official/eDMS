@@ -1,9 +1,10 @@
 <script lang="ts" context="module">
-  import type { ComponentType } from 'svelte';
+  import type { Component } from 'svelte';
 
   export interface QuickAction {
     label: string;
-    icon: ComponentType;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    icon: Component<any>;
     href?: string;
     onClick?: () => void;
   }

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { FileText, Users, UserCheck, Pencil, Trash2, Table, Grid, Plus } from 'lucide-svelte';
+  import { FileText, Users, UserCheck, Pencil, Trash2, Table, Grid, Plus } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import { StatusBadge } from '$lib/components/ui/status-badge';
   import { departmentNames } from '$lib/departments/store';

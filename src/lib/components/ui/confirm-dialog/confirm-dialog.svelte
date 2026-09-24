@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Button } from "$lib/components/ui/button";
-	import { AlertTriangle } from "lucide-svelte";
+	import { AlertTriangle } from "@lucide/svelte";
 	import { fade, scale } from "svelte/transition";
 	import { quintOut } from "svelte/easing";
 

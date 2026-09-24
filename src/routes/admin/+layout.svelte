@@ -1,7 +1,5 @@
-
 <script lang="ts">
-	import '@friendofsvelte/tipex/styles/index.css';
-  import { LayoutDashboard, Folder, Users, Clock, Settings, LogOut, Building, Menu, X } from 'lucide-svelte';
+  import { LayoutDashboard, Folder, Users, Clock, Settings, LogOut, Building, Menu, X } from '@lucide/svelte';
   import { page } from '$app/stores';
   import { derived } from 'svelte/store';
   import { fade, scale } from 'svelte/transition';
@@ -10,7 +8,7 @@
   import { goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
   import { currentUser, logout } from '$lib/auth/store';
-  import { requireAdmin } from '$lib/auth/guards';
+  import { NON_ADMIN_HOME, canAccessPath } from '$lib/auth/guards';
   import { settings } from '$lib/settings/store';
 
   let isCollapsed = false;
@@ -23,12 +21,14 @@
   // ---- Access control -------------------------------------------------------
   // The session lives in localStorage, so this has to run on the client; a
   // server-side load would see no user at all and bounce every admin.
+  // Signed-in non-admins may use the Documents page; everything else is
+  // admin-only, so they're sent there instead of back to the login screen.
   let redirecting = false;
-  $: authorized = browser && requireAdmin($currentUser);
+  $: authorized = browser && canAccessPath($currentUser, $currentPath);
 
   $: if (browser && !authorized && !redirecting) {
     redirecting = true;
-    goto('/login');
+    goto($currentUser ? NON_ADMIN_HOME : '/login').finally(() => (redirecting = false));
   }
 
   // ---- Idle session timeout -------------------------------------------------
@@ -93,7 +93,7 @@
       <div class="bg-sidebar-accent/60 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-transform duration-300 hover:scale-105">
         <LayoutDashboard class="text-sidebar-primary h-5 w-5" />
       </div>
-      {#if !isCollapsed}<span class="text-lg font-semibold tracking-tight whitespace-nowrap">rDMS Admin</span>{/if}
+      {#if !isCollapsed}<span class="text-lg font-semibold tracking-tight whitespace-nowrap">eDMS Admin</span>{/if}
       <button
         aria-label="Close menu"
         class="hover:bg-sidebar-accent ml-auto rounded-md p-1.5 transition-colors md:hidden"
@@ -104,7 +104,7 @@
     </div>
 
     <nav class="flex-1 space-y-0.5 overflow-y-auto p-3 text-sm">
-      {#each navItems as item (item.href)}
+      {#each navItems.filter((item) => canAccessPath($currentUser, item.href)) as item (item.href)}
         {@const active = $currentPath === item.href}
         <a
           href={item.href}

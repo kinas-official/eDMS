@@ -63,7 +63,7 @@ export function parseBackup(text: string): BackupPayload {
 	const payload = parsed as Partial<BackupPayload>;
 
 	if (!payload || payload.app !== 'edms' || typeof payload.data !== 'object' || !payload.data) {
-		throw new Error('That file is not an rDMS backup.');
+		throw new Error('That file is not an eDMS backup.');
 	}
 	if (payload.version !== FORMAT_VERSION) {
 		throw new Error(
