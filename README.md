@@ -55,8 +55,41 @@ A modern, responsive **Enterprise Document Management System** built with **Svel
 - **Frontend:** SvelteKit + TypeScript  
 - **UI:** TailwindCSS + shadcn/ui  
 - **State Management:** Svelte stores  
-- **Mock Backend:** TypeScript services (replaceable with real API)  
+- **Server:** SvelteKit (`adapter-node`) serving the UI and `/api/*` for web and desktop clients  
+- **Database:** SQLite via Drizzle ORM (migrations in `drizzle/`)  
+- **Desktop:** Tauri 2  
 - **Authentication:** Role-based with department awareness  
+
+> The UI pages are still being moved from mock/localStorage data onto the server API.
+
+---
+
+## Getting Started
+
+```sh
+bun install
+cp .env.example .env    # adjust paths / admin username if needed
+bun run db:seed         # creates the database, default departments and the admin account
+bun run dev
+```
+
+`db:seed` prints a generated admin password if `ADMIN_PASSWORD` is empty. Re-running it is safe.
+
+Other database commands:
+
+- `bun run db:generate` — create a migration after changing `src/lib/server/db/schema.ts`
+- `bun run db:studio` — browse the database
+
+Migrations are applied automatically when the server starts.
+
+### Production (LAN server)
+
+```sh
+bun run build
+bun run start           # node build; set ORIGIN and PORT in .env
+```
+
+Check it's up at `/api/health`.
 
 ---
 
