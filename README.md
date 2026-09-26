@@ -90,7 +90,22 @@ bun run build
 bun run start           # node build; set ORIGIN and PORT in .env
 ```
 
-Check it's up at `/api/health`.
+Check it's up at `/api/health`. Uploaded files are stored under `STORAGE_DIR`; keep `BODY_SIZE_LIMIT` above the max upload size in Settings (the Node default of 512K blocks most uploads).
+
+### Documents API
+
+All endpoints need a signed-in user and check the role's permissions (`view`, `upload`, `approve`, `delete`) on the server.
+
+| Method | Path | |
+| --- | --- | --- |
+| `GET` | `/api/documents` | List; `search`, `status`, `departmentId`, `deleted=true`, `page`, `pageSize` |
+| `POST` | `/api/documents` | Multipart upload: `file` plus optional `title`, `description`, `status`, `departmentId`, `note` |
+| `GET` | `/api/documents/:id` | Document with all versions |
+| `PATCH` | `/api/documents/:id` | JSON: `title`, `description`, `status`, `departmentId`, `assigneeId` |
+| `DELETE` | `/api/documents/:id` | Soft delete |
+| `POST` | `/api/documents/:id/restore` | Undo a soft delete |
+| `POST` | `/api/documents/:id/versions` | Multipart: `file`, optional `note` |
+| `GET` | `/api/documents/:id/download` | `version` (default latest), `inline=true` for previews |
 
 ---
 

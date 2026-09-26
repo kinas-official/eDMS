@@ -18,9 +18,10 @@ export function onUnauthorized(handler: () => void) {
 	unauthorizedHandler = handler;
 }
 
-export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+/** The raw response, for bodies that aren't JSON such as file downloads. Throws on non-2xx. */
+export async function apiFetchResponse(path: string, options: RequestInit = {}): Promise<Response> {
 	const headers = new Headers(options.headers);
-	headers.set('Accept', 'application/json');
+	if (!headers.has('Accept')) headers.set('Accept', 'application/json');
 	// Only for JSON strings: a FormData upload must let the browser set its own boundary.
 	if (typeof options.body === 'string' && !headers.has('Content-Type')) {
 		headers.set('Content-Type', 'application/json');
@@ -38,5 +39,11 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 		throw new ApiError(res.status, body?.message ?? `Request failed (${res.status})`);
 	}
 
+	return res;
+}
+
+export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+	const res = await apiFetchResponse(path, options);
+	if (res.status === 204) return undefined as T;
 	return res.json() as Promise<T>;
 }
