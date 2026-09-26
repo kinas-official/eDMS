@@ -484,7 +484,7 @@
 					<div>
 						<p class="text-sm font-medium">Require two-factor authentication for admins</p>
 						<p class="text-muted-foreground text-sm">
-							Unavailable — sign-in currently runs against a mock user list with no second factor.
+							Unavailable — sign-in uses username and password only; a second factor isn't supported yet.
 						</p>
 					</div>
 					<Switch bind:checked={draft.security.require2fa} disabled />
