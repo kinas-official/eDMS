@@ -7,7 +7,7 @@
   import { browser } from '$app/environment';
   import { goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
-  import { currentUser, logout } from '$lib/auth/store';
+  import { currentUser, loadSession, sessionChecked, signOut } from '$lib/auth/store';
   import { NON_ADMIN_HOME, canAccessPath } from '$lib/auth/guards';
   import { settings } from '$lib/settings/store';
 
@@ -19,23 +19,25 @@
   $: if ($currentPath) mobileOpen = false;
 
   // ---- Access control -------------------------------------------------------
-  // The session lives in localStorage, so this has to run on the client; a
-  // server-side load would see no user at all and bounce every admin.
+  // The session is checked against the server on first load. This runs on the
+  // client because the desktop app's bundled pages never pass through the
+  // server's hooks; the API enforces access either way.
   // Signed-in non-admins may use the Documents page; everything else is
   // admin-only, so they're sent there instead of back to the login screen.
   let redirecting = false;
   $: authorized = browser && canAccessPath($currentUser, $currentPath);
 
-  $: if (browser && !authorized && !redirecting) {
+  $: if (browser && $sessionChecked && !authorized && !redirecting) {
     redirecting = true;
     goto($currentUser ? NON_ADMIN_HOME : '/login').finally(() => (redirecting = false));
   }
 
   // ---- Idle session timeout -------------------------------------------------
+  // The server expires idle sessions too; this just signs out promptly.
   let idleTimer: ReturnType<typeof setTimeout>;
 
-  function endSession() {
-    logout();
+  async function endSession() {
+    await signOut();
     goto('/login');
   }
 
@@ -50,7 +52,10 @@
   // Re-arm whenever the configured timeout changes, not just on activity.
   $: $settings.security.sessionTimeoutMinutes, authorized, resetIdleTimer();
 
-  onMount(resetIdleTimer);
+  onMount(() => {
+    if (!$sessionChecked) loadSession();
+    resetIdleTimer();
+  });
   onDestroy(() => clearTimeout(idleTimer));
 
   const navItems = [

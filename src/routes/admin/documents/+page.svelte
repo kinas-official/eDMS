@@ -33,9 +33,7 @@
 	import { logActivity as recordActivity } from '$lib/activity/store';
 	import type { ActivityAction, ActivityLog } from '$lib/activity/types';
 	import { currentUser } from '$lib/auth/store';
-	import { canWrite } from '$lib/permissions/rbac';
-
-	$: role = $currentUser?.role ?? 'viewer';
+	import { can } from '$lib/permissions';
 
 	/** Files the dropzone turned away, shown until the next successful upload. */
 	let uploadErrors: string[] = [];
@@ -249,16 +247,16 @@
 		activity?: ActivityLog[];
 	};
 
-	// Reactive so the template re-evaluates them when `role` changes.
+	// Reactive so the template re-evaluates them when the signed-in user changes.
 	$: canEdit = (doc: DocumentItem) => {
 		if (doc.deletedAt) return false;
-		if (role === 'viewer') return false;
+		if (!can($currentUser, 'upload')) return false;
 		if (doc.status === 'Approved') return false;
 		return true;
 	};
 
 	$: canDelete = (doc: DocumentItem) => {
-		if (role !== 'admin') return false;
+		if (!can($currentUser, 'delete')) return false;
 		if (doc.deletedAt) return false;
 		return true;
 	};
@@ -509,7 +507,7 @@
 
 <div class="space-y-6">
 	<!-- Drag-and-Drop Upload -->
-	{#if canWrite($currentUser)}
+	{#if can($currentUser, 'upload')}
 		<UploadDropzone
 			on:select={handleSelect}
 			on:reject={handleReject}

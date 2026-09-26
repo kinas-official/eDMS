@@ -73,7 +73,8 @@ bun run db:seed         # creates the database, default departments and the admi
 bun run dev
 ```
 
-`db:seed` prints a generated admin password if `ADMIN_PASSWORD` is empty. Re-running it is safe.
+`db:seed` prints a generated admin password if `ADMIN_PASSWORD` is empty; sign in with it at `/login`. Re-running it is safe.
+Run `bun run db:seed -- --demo` to also create `editor1` and `viewer1` (passwords printed) for trying out roles.
 
 Other database commands:
 

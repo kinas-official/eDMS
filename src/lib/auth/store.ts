@@ -1,29 +1,50 @@
 import { writable } from 'svelte/store';
-import { browser } from '$app/environment';
+import { apiFetch, onUnauthorized } from '$lib/api/client';
+import type { AuthUser } from './types';
 
-export interface User {
-  id: string;
-  username: string;
-  role: 'admin' | 'editor' | 'viewer';
-  department: string;
+/**
+ * Client-side view of the session. The session itself is on the server (an
+ * httpOnly cookie on the web), so nothing here is persisted: on a fresh load
+ * the user is fetched again from /api/auth/me.
+ */
+export const currentUser = writable<AuthUser | null>(null);
+
+/** False until the first session check finishes, so guards don't redirect too early. */
+export const sessionChecked = writable(false);
+
+onUnauthorized(() => currentUser.set(null));
+
+let pending: Promise<AuthUser | null> | null = null;
+
+export function loadSession(): Promise<AuthUser | null> {
+	pending ??= apiFetch<{ user: AuthUser }>('/api/auth/me')
+		.then(({ user }) => user)
+		.catch(() => null)
+		.then((user) => {
+			currentUser.set(user);
+			sessionChecked.set(true);
+			return user;
+		})
+		.finally(() => (pending = null));
+	return pending;
 }
 
-const storedUser = browser
-  ? JSON.parse(localStorage.getItem('currentUser') ?? 'null')
-  : null;
-
-export const currentUser = writable<User | null>(storedUser);
-
-export function login(user: User) {
-  currentUser.set(user);
-  if (browser) {
-    localStorage.setItem('currentUser', JSON.stringify(user));
-  }
+export async function signIn(username: string, password: string): Promise<AuthUser> {
+	const { user } = await apiFetch<{ user: AuthUser }>('/api/auth/login', {
+		method: 'POST',
+		body: JSON.stringify({ username, password })
+	});
+	currentUser.set(user);
+	sessionChecked.set(true);
+	return user;
 }
 
-export function logout() {
-  currentUser.set(null);
-  if (browser) {
-    localStorage.removeItem('currentUser');
-  }
+export async function signOut() {
+	try {
+		await apiFetch('/api/auth/logout', { method: 'POST' });
+	} catch {
+		// Signed out locally either way; the server session expires on its own.
+	} finally {
+		currentUser.set(null);
+	}
 }

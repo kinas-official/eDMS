@@ -1,5 +1,14 @@
-export const IS_TAURI = '__TAURI__' in window;
+/**
+ * Base URL for API calls. Empty means same origin, which is how the web app
+ * is served. The desktop app will set this to the server address the user
+ * picks, since its bundled UI doesn't live on the server.
+ */
+let apiBaseUrl = '';
 
-export const API_BASE_URL = IS_TAURI
-  ? 'http://192.168.1.10:8000'
-  : 'http://localhost:8000';
+export function getApiBaseUrl(): string {
+	return apiBaseUrl;
+}
+
+export function setApiBaseUrl(url: string) {
+	apiBaseUrl = url.replace(/\/+$/, '');
+}

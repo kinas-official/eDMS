@@ -2,7 +2,6 @@ export type Role = 'admin' | 'editor' | 'viewer';
 
 export const ROLES: Role[] = ['admin', 'editor', 'viewer'];
 
-/** Mirrors the values in `$lib/permissions/rules`, as a union we can index with. */
 export type Permission = 'view' | 'upload' | 'approve' | 'delete';
 
 export const PERMISSION_LABELS: { value: Permission; label: string; description: string }[] = [
@@ -87,6 +86,26 @@ export const DEFAULT_SETTINGS: AppSettings = {
 		viewer: ['view']
 	}
 };
+
+/**
+ * Section-wise merge over the defaults. A plain spread of the stored object
+ * would leave any key added in a later release `undefined` for everyone who
+ * already has settings saved, which surfaces as blank inputs and NaN numbers.
+ *
+ * Shared by the client store and the server, which keeps its copy in the DB.
+ */
+export function withDefaults(stored: Partial<AppSettings> | null | undefined): AppSettings {
+	if (!stored) return structuredClone(DEFAULT_SETTINGS);
+
+	return {
+		general: { ...DEFAULT_SETTINGS.general, ...stored.general },
+		documents: { ...DEFAULT_SETTINGS.documents, ...stored.documents },
+		retention: { ...DEFAULT_SETTINGS.retention, ...stored.retention },
+		notifications: { ...DEFAULT_SETTINGS.notifications, ...stored.notifications },
+		security: { ...DEFAULT_SETTINGS.security, ...stored.security },
+		roles: { ...DEFAULT_SETTINGS.roles, ...stored.roles }
+	};
+}
 
 /**
  * `.pdf, docx , .TXT` -> `['.pdf', '.docx', '.txt']`.

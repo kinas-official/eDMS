@@ -1,27 +1,9 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { browserStorage } from '$lib/storage/browser';
-import { DEFAULT_SETTINGS, type AppSettings } from './types';
+import { DEFAULT_SETTINGS, withDefaults, type AppSettings } from './types';
 
 const STORAGE_KEY = 'settings';
-
-/**
- * Section-wise merge over the defaults. A plain spread of the stored object
- * would leave any key added in a later release `undefined` for everyone who
- * already has settings saved, which surfaces as blank inputs and NaN numbers.
- */
-function withDefaults(stored: Partial<AppSettings> | null): AppSettings {
-	if (!stored) return structuredClone(DEFAULT_SETTINGS);
-
-	return {
-		general: { ...DEFAULT_SETTINGS.general, ...stored.general },
-		documents: { ...DEFAULT_SETTINGS.documents, ...stored.documents },
-		retention: { ...DEFAULT_SETTINGS.retention, ...stored.retention },
-		notifications: { ...DEFAULT_SETTINGS.notifications, ...stored.notifications },
-		security: { ...DEFAULT_SETTINGS.security, ...stored.security },
-		roles: { ...DEFAULT_SETTINGS.roles, ...stored.roles }
-	};
-}
 
 const initial = browser
 	? withDefaults(await browserStorage.get<Partial<AppSettings>>(STORAGE_KEY))

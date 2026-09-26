@@ -1,8 +1,10 @@
 <script lang="ts">
   import  Input  from '$lib/components/ui/input/input.svelte';
   import  Button  from '$lib/components/ui/button/button.svelte';
-  import { login } from '$lib/auth/store';
-  import { mockLogin } from '$lib/auth/mock';
+  import { signIn } from '$lib/auth/store';
+  import { ApiError } from '$lib/api/client';
+  import { NON_ADMIN_HOME } from '$lib/auth/guards';
+  import { isAdmin } from '$lib/permissions';
   import { goto } from '$app/navigation';
 
   let username = '';
@@ -11,14 +13,17 @@
   let error: string | null = null;
 
   async function handleLogin() {
+    if (loading) return;
     error = null;
     loading = true;
     try {
-      const user = await mockLogin(username, password);
-      login(user);
-      goto(user.role === 'admin' ? '/admin' : '/admin/documents');
+      const user = await signIn(username, password);
+      goto(isAdmin(user) ? '/admin' : NON_ADMIN_HOME);
     } catch (e) {
-      error = (e as Error).message;
+      // ApiError carries the server's message (wrong password, locked out, …);
+      // anything else means the request never got an answer.
+      error = e instanceof ApiError ? e.message : 'Could not reach the server. Try again.';
+      password = '';
     } finally {
       loading = false;
     }
@@ -48,6 +53,7 @@
 
       <Button
         type="submit"
+        disabled={loading}
         class="bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 w-full transition-transform hover:scale-[1.02]"
       >
         {loading ? 'Signing in…' : 'Login'}
