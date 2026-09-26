@@ -21,7 +21,7 @@ import type {
 	DocumentUpdate,
 	DocumentVersionDTO
 } from '$lib/documents/api-types';
-import { can } from '$lib/permissions';
+import { can, isAdmin } from '$lib/permissions';
 import { logActivity } from '$lib/server/activity';
 import { db, schema } from '$lib/server/db';
 import { DOCUMENT_STATUSES, type Document, type DocumentStatus } from '$lib/server/db/schema';
@@ -138,8 +138,45 @@ function escapeLike(text: string) {
 	return text.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
+/**
+ * Admins and approvers work across the whole organization; nobody else is
+ * limited by department.
+ */
+function seesAllDepartments(user: AuthUser) {
+	return isAdmin(user) || can(user, 'approve');
+}
+
+/**
+ * Department scoping: everyone else sees their own department's documents
+ * plus any they own or are assigned to review, so a cross-department reviewer
+ * can still open what's on their plate. "No department" acts as a department
+ * of its own: users without one see the unfiled documents.
+ */
+function visibleTo(user: AuthUser): SQL | undefined {
+	if (seesAllDepartments(user)) return undefined;
+	return or(
+		user.departmentId === null
+			? isNull(documents.departmentId)
+			: eq(documents.departmentId, user.departmentId),
+		eq(documents.ownerId, user.id),
+		eq(documents.assigneeId, user.id)
+	);
+}
+
+/** Row-level twin of `visibleTo`; keep the two in step. */
+function canSee(user: AuthUser, doc: Document) {
+	return (
+		seesAllDepartments(user) ||
+		doc.departmentId === user.departmentId ||
+		doc.ownerId === user.id ||
+		doc.assigneeId === user.id
+	);
+}
+
 export function listDocuments(user: AuthUser, query: DocumentListQuery): DocumentListResponse {
 	const conditions: SQL[] = [];
+	const scope = visibleTo(user);
+	if (scope) conditions.push(scope);
 
 	if (query.deleted) {
 		if (!can(user, 'delete')) error(403, 'You do not have permission to see deleted documents');
@@ -194,10 +231,15 @@ function groupVersions(rows: VersionRow[]) {
 	return map;
 }
 
-/** 404s for missing documents, and for deleted ones unless the user can restore them. */
+/**
+ * 404s for missing documents, ones outside the user's scope (so ids from other
+ * departments can't be probed), and deleted ones unless the user can restore them.
+ */
 function loadDocument(user: AuthUser, id: string): DocumentRow {
 	const row = selectDocuments().where(eq(documents.id, id)).get() as DocumentRow | undefined;
-	if (!row || (row.doc.deletedAt && !can(user, 'delete'))) error(404, 'Document not found');
+	if (!row || !canSee(user, row.doc) || (row.doc.deletedAt && !can(user, 'delete'))) {
+		error(404, 'Document not found');
+	}
 	return row;
 }
 
@@ -254,6 +296,16 @@ function assertNotLocked(user: AuthUser, doc: Document) {
 	if (doc.status === 'approved' && !can(user, 'approve')) {
 		error(403, 'Approved documents can only be changed by an approver');
 	}
+}
+
+/**
+ * Department-scoped users can only file documents under their own department
+ * (or under none, if they have none), or they'd lose sight of them. Admins
+ * and approvers can refile anything, e.g. to fix a misfiled document.
+ */
+function assertCanFileUnder(user: AuthUser, departmentId: number | null) {
+	if (seesAllDepartments(user) || departmentId === user.departmentId) return;
+	error(403, 'You can only file documents under your own department');
 }
 
 function assertDepartment(id: number) {
@@ -365,18 +417,21 @@ export async function createDocument(
 	const status = fields.status ?? (settings.documents.requireApproval ? 'draft' : 'approved');
 	assertStatusAllowed(user, status, settings);
 
+	// Admins default to the organization's default department; everyone else to their own.
 	let departmentId = fields.departmentId;
 	if (departmentId === undefined) {
-		departmentId =
-			db
-				.select({ id: departments.id })
-				.from(departments)
-				.where(eq(departments.name, settings.general.defaultDepartment))
-				.get()?.id ??
-			user.departmentId ??
-			null;
-	} else if (departmentId !== null) {
-		assertDepartment(departmentId);
+		departmentId = isAdmin(user)
+			? (db
+					.select({ id: departments.id })
+					.from(departments)
+					.where(eq(departments.name, settings.general.defaultDepartment))
+					.get()?.id ??
+				user.departmentId ??
+				null)
+			: user.departmentId;
+	} else {
+		if (departmentId !== null) assertDepartment(departmentId);
+		assertCanFileUnder(user, departmentId);
 	}
 
 	const extractedText = await extractText(upload);
@@ -531,7 +586,10 @@ export function updateDocument(
 	}
 	if (update.status !== undefined && changes.status)
 		assertStatusAllowed(user, update.status, settings);
-	if (update.departmentId != null && changes.departmentId) assertDepartment(update.departmentId);
+	if (update.departmentId !== undefined && changes.departmentId) {
+		if (update.departmentId !== null) assertDepartment(update.departmentId);
+		assertCanFileUnder(user, update.departmentId);
+	}
 	if (update.assigneeId != null && changes.assigneeId) assertAssignee(update.assigneeId);
 
 	const values = Object.fromEntries(changed.map((f) => [f, changes[f][1]])) as DocumentUpdate;

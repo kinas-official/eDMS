@@ -61,9 +61,15 @@
     </form>
 
     <!-- Footer -->
-    <p class="text-sidebar-foreground/50 mt-4 text-center text-xs">
-      &copy; {new Date().getFullYear()} eDMS. All rights reserved.
-    </p>
+    <div class="text-sidebar-foreground/50 mt-4 space-y-1 text-center text-xs">
+      <p>Product of <a
+        href="https://quinas-official.vercel.app/"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-sidebar-foreground/80 hover:text-sidebar-foreground font-medium underline-offset-2 hover:underline"
+      >Quinas</a></p>
+      <p>&copy; {new Date().getFullYear()} eDMS. All rights reserved.</p>
+    </div>
   </div>
 </div>
 

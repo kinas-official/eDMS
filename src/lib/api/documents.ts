@@ -25,7 +25,10 @@ export interface NewDocumentInput {
 	title?: string;
 	description?: string;
 	status?: DocumentStatus;
-	/** null files it under no department; omitted uses the default from Settings. */
+	/**
+	 * null files it under no department. Omitted: the user's own department, or
+	 * for admins the default from Settings. Non-admins can only pick their own.
+	 */
 	departmentId?: number | null;
 	note?: string;
 }

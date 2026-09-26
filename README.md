@@ -94,7 +94,7 @@ Check it's up at `/api/health`. Uploaded files are stored under `STORAGE_DIR`; k
 
 ### Documents API
 
-All endpoints need a signed-in user and check the role's permissions (`view`, `upload`, `approve`, `delete`) on the server.
+All endpoints need a signed-in user and check the role's permissions (`view`, `upload`, `approve`, `delete`) on the server. Admins and anyone with `approve` see every department. Everyone else sees their own department's documents plus ones they own or are assigned to, and can only file documents under their own department; users without a department see and file unfiled documents.
 
 | Method | Path | |
 | --- | --- | --- |
